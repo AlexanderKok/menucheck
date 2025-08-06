@@ -1,7 +1,7 @@
 import { getAuth } from 'firebase/auth';
 import { app } from './firebase';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8787';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5500';
 
 class APIError extends Error {
   constructor(public status: number, message: string) {
@@ -51,19 +51,76 @@ export async function getCurrentUser() {
   return response.json();
 }
 
-// Example of how to add more API endpoints:
-// export async function createChat(data: CreateChatData) {
-//   const response = await fetchWithAuth('/api/v1/protected/chats', {
-//     method: 'POST',
-//     headers: {
-//       'Content-Type': 'application/json',
-//     },
-//     body: JSON.stringify(data),
-//   });
-//   return response.json();
-// }
+// Menu Insights API endpoints
+export async function uploadMenu(menuData: {
+  fileName: string;
+  originalFileName: string;
+  fileSize: number;
+  mimeType: string;
+  fileUrl?: string;
+}) {
+  const response = await fetchWithAuth('/api/v1/protected/menus/upload', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(menuData),
+  });
+  return response.json();
+}
+
+export async function getUserMenus() {
+  const response = await fetchWithAuth('/api/v1/protected/menus');
+  return response.json();
+}
+
+export async function getMenuAnalysis(menuId: string) {
+  const response = await fetchWithAuth(`/api/v1/protected/menus/${menuId}`);
+  return response.json();
+}
+
+// Consultation API endpoint (public)
+export async function submitConsultation(consultationData: {
+  restaurantName: string;
+  cuisine: string;
+  location: string;
+  establishedYear?: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  seatingCapacity: string;
+  serviceType: string[];
+  priceRange: string;
+  currentChallenges?: string[];
+  primaryGoals: string[];
+  timeframe: string;
+  budget: string;
+  additionalNotes?: string;
+  marketingConsent?: boolean;
+  termsAccepted: boolean;
+}) {
+  const response = await fetch(`${API_BASE_URL}/api/v1/consultations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(consultationData),
+  });
+
+  if (!response.ok) {
+    throw new APIError(
+      response.status,
+      `Consultation submission failed: ${response.statusText}`
+    );
+  }
+
+  return response.json();
+}
 
 export const api = {
   getCurrentUser,
-  // Add other API endpoints here
+  uploadMenu,
+  getUserMenus,
+  getMenuAnalysis,
+  submitConsultation,
 }; 

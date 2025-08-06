@@ -7,6 +7,9 @@ import { Home } from '@/pages/Home';
 import { Settings } from '@/pages/Settings';
 import { Page1 } from '@/pages/Page1';
 import { Page2 } from '@/pages/Page2';
+import { MenuInsights } from '@/pages/MenuInsights';
+import { ConsultationDemo } from '@/pages/ConsultationDemo';
+import { LandingPage } from '@/pages/LandingPage';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import {
   SidebarProvider,
@@ -23,26 +26,47 @@ function AppContent() {
   return (
     <SidebarProvider>
       <div className="flex flex-col w-full min-h-screen bg-background">
-        <Navbar />
-        {!user ? (
-          <main className="flex flex-col items-center justify-center flex-1 p-4">
-            <LoginForm />
-          </main>
-        ) : (
-          <div className="flex flex-1">
-            <AppSidebar />
-            <SidebarInset className="flex-1">
-              <main className="flex-1">
-                <Routes>
-                  <Route path="/" element={<Home />} />
-                  <Route path="/page1" element={<Page1 />} />
-                  <Route path="/page2" element={<Page2 />} />
-                  <Route path="/settings" element={<Settings />} />
-                </Routes>
-              </main>
-            </SidebarInset>
-          </div>
-        )}
+        <Routes>
+          {/* Main landing page - public */}
+          <Route path="/" element={
+            <LandingPage 
+              onGetStarted={() => window.location.href = '/menu-insights'}
+              onSignIn={() => window.location.href = '/dashboard'}
+            />
+          } />
+          
+          {/* Public routes */}
+          <Route path="/menu-insights" element={<MenuInsights />} />
+          <Route path="/consultation" element={<ConsultationDemo />} />
+          
+          {/* Protected dashboard routes with sidebar */}
+          <Route path="/dashboard/*" element={
+            <>
+              <Navbar />
+              {!user ? (
+                <main className="flex flex-col items-center justify-center flex-1 p-4">
+                  <LoginForm />
+                </main>
+              ) : (
+                <div className="flex flex-1">
+                  <AppSidebar />
+                  <SidebarInset className="flex-1">
+                    <main className="flex-1">
+                      <Routes>
+                        <Route path="/" element={<Home />} />
+                        <Route path="/page1" element={<Page1 />} />
+                        <Route path="/page2" element={<Page2 />} />
+                        <Route path="/menu-insights" element={<MenuInsights />} />
+                        <Route path="/menu-insights/upload" element={<MenuInsights />} />
+                        <Route path="/settings" element={<Settings />} />
+                      </Routes>
+                    </main>
+                  </SidebarInset>
+                </div>
+              )}
+            </>
+          } />
+        </Routes>
       </div>
     </SidebarProvider>
   );

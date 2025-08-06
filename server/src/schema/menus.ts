@@ -1,0 +1,103 @@
+import { pgTable, text, timestamp, integer, jsonb, boolean, decimal } from 'drizzle-orm/pg-core';
+import { appSchema } from './users';
+
+export const menuUploads = appSchema.table('menu_uploads', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  fileName: text('file_name').notNull(),
+  originalFileName: text('original_file_name').notNull(),
+  fileSize: integer('file_size').notNull(), // in bytes
+  mimeType: text('mime_type').notNull(),
+  fileUrl: text('file_url').notNull(), // URL to stored file
+  status: text('status').notNull().default('uploading'), // uploading, processing, completed, failed
+  
+  // Analysis results
+  analysisData: jsonb('analysis_data'), // JSON containing full analysis results
+  totalItems: integer('total_items'),
+  avgPrice: decimal('avg_price', { precision: 10, scale: 2 }),
+  minPrice: decimal('min_price', { precision: 10, scale: 2 }),
+  maxPrice: decimal('max_price', { precision: 10, scale: 2 }),
+  
+  // Metrics scores (0-100)
+  profitabilityScore: integer('profitability_score'),
+  readabilityScore: integer('readability_score'),
+  pricingOptimizationScore: integer('pricing_optimization_score'),
+  categoryBalanceScore: integer('category_balance_score'),
+  
+  // Processing info
+  processingStartedAt: timestamp('processing_started_at'),
+  processingCompletedAt: timestamp('processing_completed_at'),
+  errorMessage: text('error_message'),
+  
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const menuCategories = appSchema.table('menu_categories', {
+  id: text('id').primaryKey(),
+  menuId: text('menu_id').notNull().references(() => menuUploads.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  itemCount: integer('item_count').notNull().default(0),
+  avgPrice: decimal('avg_price', { precision: 10, scale: 2 }),
+  position: integer('position'), // order on menu
+  
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const menuItems = appSchema.table('menu_items', {
+  id: text('id').primaryKey(),
+  menuId: text('menu_id').notNull().references(() => menuUploads.id, { onDelete: 'cascade' }),
+  categoryId: text('category_id').references(() => menuCategories.id, { onDelete: 'set null' }),
+  
+  name: text('name').notNull(),
+  description: text('description'),
+  price: decimal('price', { precision: 10, scale: 2 }).notNull(),
+  currency: text('currency').notNull().default('USD'),
+  
+  // Position and layout
+  position: integer('position'), // position within category
+  isHighlighted: boolean('is_highlighted').default(false), // special emphasis on menu
+  
+  // Analysis insights
+  estimatedCost: decimal('estimated_cost', { precision: 10, scale: 2 }),
+  profitMargin: decimal('profit_margin', { precision: 5, scale: 2 }), // percentage
+  popularityScore: integer('popularity_score'), // 0-100 based on placement/design
+  
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const menuRecommendations = appSchema.table('menu_recommendations', {
+  id: text('id').primaryKey(),
+  menuId: text('menu_id').notNull().references(() => menuUploads.id, { onDelete: 'cascade' }),
+  
+  type: text('type').notNull(), // pricing, placement, description, category
+  priority: text('priority').notNull(), // high, medium, low
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  impact: text('impact'), // estimated impact description
+  
+  // Optional specific item/category reference
+  itemId: text('item_id').references(() => menuItems.id, { onDelete: 'cascade' }),
+  categoryId: text('category_id').references(() => menuCategories.id, { onDelete: 'cascade' }),
+  
+  // Implementation tracking
+  isImplemented: boolean('is_implemented').default(false),
+  implementedAt: timestamp('implemented_at'),
+  
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Import users for foreign key reference
+import { users } from './users';
+
+export type MenuUpload = typeof menuUploads.$inferSelect;
+export type NewMenuUpload = typeof menuUploads.$inferInsert;
+
+export type MenuCategory = typeof menuCategories.$inferSelect;
+export type NewMenuCategory = typeof menuCategories.$inferInsert;
+
+export type MenuItem = typeof menuItems.$inferSelect;
+export type NewMenuItem = typeof menuItems.$inferInsert;
+
+export type MenuRecommendation = typeof menuRecommendations.$inferSelect;
+export type NewMenuRecommendation = typeof menuRecommendations.$inferInsert;

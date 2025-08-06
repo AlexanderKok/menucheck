@@ -3,6 +3,8 @@ import {
   Settings, 
   FileText,
   Layers,
+  BarChart3,
+  Upload,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -30,26 +32,50 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Home" isActive={isActive('/')} asChild>
-                  <Link to="/">
+                <SidebarMenuButton tooltip="Home" isActive={isActive('/dashboard')} asChild>
+                  <Link to="/dashboard">
                     <Home className="w-4 h-4" />
                     <span>Home</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Page 1" isActive={isActive('/page1')} asChild>
-                  <Link to="/page1">
+                <SidebarMenuButton tooltip="Page 1" isActive={isActive('/dashboard/page1')} asChild>
+                  <Link to="/dashboard/page1">
                     <FileText className="w-4 h-4" />
                     <span>Page 1</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Page 2" isActive={isActive('/page2')} asChild>
-                  <Link to="/page2">
+                <SidebarMenuButton tooltip="Page 2" isActive={isActive('/dashboard/page2')} asChild>
+                  <Link to="/dashboard/page2">
                     <Layers className="w-4 h-4" />
                     <span>Page 2</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Menu Insights</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Dashboard" isActive={isActive('/dashboard/menu-insights')} asChild>
+                  <Link to="/dashboard/menu-insights">
+                    <BarChart3 className="w-4 h-4" />
+                    <span>Dashboard</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Upload Menu" isActive={isActive('/dashboard/menu-insights/upload')} asChild>
+                  <Link to="/dashboard/menu-insights/upload">
+                    <Upload className="w-4 h-4" />
+                    <span>Upload Menu</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -61,8 +87,8 @@ export function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Settings" isActive={isActive('/settings')} asChild>
-              <Link to="/settings">
+            <SidebarMenuButton tooltip="Settings" isActive={isActive('/dashboard/settings')} asChild>
+              <Link to="/dashboard/settings">
                 <Settings className="w-4 h-4" />
                 <span>Settings</span>
               </Link>

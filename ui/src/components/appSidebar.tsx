@@ -72,7 +72,7 @@ export function AppSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Upload Menu" isActive={isActive('/dashboard/menu-insights/upload')} asChild>
+                <SidebarMenuButton tooltip="Upload PDF" isActive={isActive('/dashboard/menu-insights/upload')} asChild>
                   <Link to="/dashboard/menu-insights/upload">
                     <Upload className="w-4 h-4" />
                     <span>Upload Menu</span>

@@ -20,6 +20,8 @@ interface MenuUploadProps {
   onFileUpload?: (files: File[]) => void;
   maxFiles?: number;
   acceptedFileTypes?: Record<string, string[]>;
+  isPublicMode?: boolean;
+  disabled?: boolean;
 }
 
 export function MenuUpload({ 
@@ -28,7 +30,9 @@ export function MenuUpload({
   acceptedFileTypes = {
     'application/pdf': ['.pdf'],
     'image/*': ['.png', '.jpg', '.jpeg']
-  }
+  },
+  isPublicMode = false,
+  disabled = false
 }: MenuUploadProps) {
   const { t } = useTranslation();
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -132,7 +136,7 @@ export function MenuUpload({
     onDrop,
     accept: acceptedFileTypes,
     maxFiles,
-    disabled: uploadedFiles.length >= maxFiles
+    disabled: disabled || uploadedFiles.length >= maxFiles
   });
 
   const getStatusIcon = (status: string) => {
@@ -154,7 +158,10 @@ export function MenuUpload({
         <CardHeader>
           <CardTitle>{t('menuUpload.title', 'Upload Your Menu')}</CardTitle>
           <CardDescription>
-            {t('menuUpload.description', 'Upload PDF files or images of your restaurant menu for analysis')}
+            {isPublicMode 
+              ? t('menuUpload.publicDescription', 'Upload PDF files or images of your restaurant menu for free analysis. No signup required!')
+              : t('menuUpload.description', 'Upload PDF files or images of your restaurant menu for analysis')
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>

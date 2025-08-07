@@ -132,7 +132,7 @@ const resources = {
         subtitle: 'Analyze your menu performance and get actionable recommendations',
         tabs: {
           overview: 'Overview',
-          upload: 'Upload Menu',
+          upload: 'Upload PDF',
           history: 'Analysis History'
         },
         metrics: {

@@ -1,14 +1,18 @@
 import { pgTable, text, timestamp, integer, jsonb, boolean, decimal } from 'drizzle-orm/pg-core';
 import { appSchema } from './users';
+import { restaurants } from './restaurants';
 
 export const menuUploads = appSchema.table('menu_uploads', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  fileName: text('file_name').notNull(),
-  originalFileName: text('original_file_name').notNull(),
-  fileSize: integer('file_size').notNull(), // in bytes
-  mimeType: text('mime_type').notNull(),
-  fileUrl: text('file_url').notNull(), // URL to stored file
+  restaurantId: text('restaurant_id').references(() => restaurants.id, { onDelete: 'set null' }),
+  fileName: text('file_name'),
+  originalFileName: text('original_file_name'),
+  fileSize: integer('file_size'), // in bytes
+  mimeType: text('mime_type'),
+  fileUrl: text('file_url'), // URL to stored file or original source URL
+  sourceUrl: text('source_url'), // Original URL for URL-based uploads
+  parseMethod: text('parse_method'), // html, pdf_digital, pdf_ocr, javascript
   status: text('status').notNull().default('uploading'), // uploading, processing, completed, failed
   
   // Analysis results
@@ -52,11 +56,22 @@ export const menuItems = appSchema.table('menu_items', {
   name: text('name').notNull(),
   description: text('description'),
   price: decimal('price', { precision: 10, scale: 2 }).notNull(),
-  currency: text('currency').notNull().default('USD'),
+  currency: text('currency').notNull().default('EUR'),
   
   // Position and layout
   position: integer('position'), // position within category
   isHighlighted: boolean('is_highlighted').default(false), // special emphasis on menu
+  
+  // Visual prominence indicators for URL-parsed menus
+  prominence: jsonb('prominence').$type<{
+    fontSize?: 'small' | 'medium' | 'large' | 'xlarge';
+    hasSpecialIcon?: boolean;
+    iconType?: 'chef_special' | 'customer_favorite' | 'new' | 'spicy' | 'vegetarian' | 'gluten_free' | string;
+    hasVisualBox?: boolean;
+    isHighlighted?: boolean;
+    position?: { x: number; y: number };
+    confidenceScore?: number; // 0-100 confidence in prominence detection
+  }>(),
   
   // Analysis insights
   estimatedCost: decimal('estimated_cost', { precision: 10, scale: 2 }),

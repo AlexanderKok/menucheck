@@ -8,6 +8,27 @@
       "when": 1754492091365,
       "tag": "0000_perpetual_northstar",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1754512381529,
+      "tag": "0001_slippery_joseph",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1754554675117,
+      "tag": "0002_wild_pet_avengers",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1754555357251,
+      "tag": "0003_confused_hannibal_king",
+      "breakpoints": true
     }
   ]
 }

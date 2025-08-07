@@ -79,6 +79,62 @@ export async function getMenuAnalysis(menuId: string) {
   return response.json();
 }
 
+// URL-based menu parsing endpoints
+export async function uploadMenuUrl(urlData: {
+  url: string;
+  restaurant: {
+    name: string;
+    address?: string;
+    city?: string;
+    country?: string;
+    restaurantType?: string;
+    cuisines?: string[];
+    phoneNumber?: string;
+    description?: string;
+  };
+}) {
+  const response = await fetchWithAuth('/api/v1/protected/menus/parse-url', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(urlData),
+  });
+  return response.json();
+}
+
+// Restaurant management endpoints
+export async function createRestaurant(restaurantData: {
+  name: string;
+  url: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  restaurantType?: string;
+  cuisines?: string[];
+  phoneNumber?: string;
+  description?: string;
+}) {
+  const response = await fetchWithAuth('/api/v1/protected/restaurants', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(restaurantData),
+  });
+  return response.json();
+}
+
+export async function getRestaurants() {
+  const response = await fetchWithAuth('/api/v1/protected/restaurants');
+  return response.json();
+}
+
+export async function getRestaurantMenus(restaurantId: string) {
+  const response = await fetchWithAuth(`/api/v1/protected/restaurants/${restaurantId}/menus`);
+  return response.json();
+}
+
 // Consultation API endpoint (public)
 export async function submitConsultation(consultationData: {
   restaurantName: string;
@@ -120,7 +176,11 @@ export async function submitConsultation(consultationData: {
 export const api = {
   getCurrentUser,
   uploadMenu,
+  uploadMenuUrl,
   getUserMenus,
   getMenuAnalysis,
+  createRestaurant,
+  getRestaurants,
+  getRestaurantMenus,
   submitConsultation,
 }; 

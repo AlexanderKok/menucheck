@@ -1,0 +1,1 @@
+ALTER TABLE "app"."menu_items" ALTER COLUMN "currency" SET DEFAULT 'EUR';

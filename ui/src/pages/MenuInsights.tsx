@@ -5,8 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { MenuUpload } from '@/components/MenuUpload';
-import { Hero } from '@/components/Hero';
-import { Header } from '@/components/Header';
+import { UrlUpload } from '@/components/UrlUpload';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -110,6 +109,15 @@ export function MenuInsights() {
     }, 5000); // Wait a bit for processing
   };
 
+  const handleUrlUpload = (urlData: any) => {
+    // URL upload is handled by the UrlUpload component
+    console.log('URL uploaded:', urlData);
+    // Refresh the menu list after upload
+    setTimeout(() => {
+      loadUserMenus();
+    }, 5000); // Wait a bit for processing
+  };
+
   const getScoreColor = (score: number) => {
     if (score >= 80) return 'text-green-600';
     if (score >= 60) return 'text-yellow-600';
@@ -131,20 +139,10 @@ export function MenuInsights() {
     }
   };
 
-  // If user is not logged in, show public landing page
+  // If user is not logged in, redirect to upload page
   if (!user) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header 
-          onSignIn={() => window.location.href = '/login'}
-          onGetStarted={() => window.location.href = '/login'}
-        />
-        <Hero 
-          onGetStarted={() => window.location.href = '/login'}
-          onLearnMore={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
-        />
-      </div>
-    );
+    window.location.href = '/upload';
+    return null;
   }
 
   return (
@@ -163,12 +161,15 @@ export function MenuInsights() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">
             {t('menuInsights.tabs.overview', 'Overview')}
           </TabsTrigger>
           <TabsTrigger value="upload">
-            {t('menuInsights.tabs.upload', 'Upload Menu')}
+            {t('menuInsights.tabs.upload', 'Upload PDF')}
+          </TabsTrigger>
+          <TabsTrigger value="url">
+            {t('menuInsights.tabs.url', 'Parse URL')}
           </TabsTrigger>
           <TabsTrigger value="history">
             {t('menuInsights.tabs.history', 'Analysis History')}
@@ -331,6 +332,10 @@ export function MenuInsights() {
 
         <TabsContent value="upload" className="space-y-6">
           <MenuUpload onFileUpload={handleFileUpload} />
+        </TabsContent>
+
+        <TabsContent value="url" className="space-y-6">
+          <UrlUpload onUrlUpload={handleUrlUpload} />
         </TabsContent>
 
         <TabsContent value="history" className="space-y-6">

@@ -1,6 +1,5 @@
 import { AuthProvider, useAuth } from '@/lib/auth-context';
 import { ThemeProvider } from "@/components/theme-provider";
-import { LoginForm } from '@/components/login-form';
 import { Navbar } from '@/components/navbar';
 import { AppSidebar } from '@/components/appSidebar';
 import { Home } from '@/pages/Home';
@@ -9,8 +8,11 @@ import { Page1 } from '@/pages/Page1';
 import { Page2 } from '@/pages/Page2';
 import { MenuInsights } from '@/pages/MenuInsights';
 import { ConsultationDemo } from '@/pages/ConsultationDemo';
-import { LandingPage } from '@/pages/LandingPage';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Login } from '@/pages/Login';
+import { PublicUpload } from '@/pages/PublicUpload';
+import { Hero } from '@/components/Hero';
+import { Header } from '@/components/Header';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import {
   SidebarProvider,
   SidebarInset,
@@ -29,11 +31,23 @@ function AppContent() {
         <Routes>
           {/* Main landing page - public */}
           <Route path="/" element={
-            <LandingPage 
-              onGetStarted={() => window.location.href = '/menu-insights'}
-              onSignIn={() => window.location.href = '/dashboard'}
-            />
+            <div className="min-h-screen bg-background">
+              <Header 
+                onSignIn={() => window.location.href = '/login'}
+                onGetStarted={() => window.location.href = '/upload'}
+              />
+              <Hero 
+                onGetStarted={() => window.location.href = '/upload'}
+                onLearnMore={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
+              />
+            </div>
           } />
+          
+          {/* Authentication routes */}
+          <Route path="/login" element={<Login />} />
+          
+          {/* Public upload route */}
+          <Route path="/upload" element={<PublicUpload />} />
           
           {/* Public routes */}
           <Route path="/menu-insights" element={<MenuInsights />} />
@@ -44,9 +58,7 @@ function AppContent() {
             <>
               <Navbar />
               {!user ? (
-                <main className="flex flex-col items-center justify-center flex-1 p-4">
-                  <LoginForm />
-                </main>
+                <Navigate to="/login" replace />
               ) : (
                 <div className="flex flex-1">
                   <AppSidebar />

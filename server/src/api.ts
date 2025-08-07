@@ -7,8 +7,11 @@ import { getDatabase, testDatabaseConnection } from './lib/db';
 import { setEnvContext, clearEnvContext, getDatabaseUrl } from './lib/env';
 import * as schema from './schema/users';
 import * as menuSchema from './schema/menus';
+import * as restaurantSchema from './schema/restaurants';
 import * as consultationSchema from './schema/consultations';
 import { eq, desc } from 'drizzle-orm';
+import type { UrlUploadData } from './types/url-parsing';
+import { parseQueue } from './services/parseQueue';
 
 type Env = {
   RUNTIME?: string;
@@ -165,7 +168,7 @@ protectedRoutes.post('/menus/upload', async (c) => {
     // For now, we'll simulate the upload process
     const menuData = {
       id,
-      userId: user.uid,
+      userId: user.id,
       fileName: body.fileName || 'uploaded_menu.pdf',
       originalFileName: body.originalFileName || body.fileName,
       fileSize: body.fileSize || 0,
@@ -235,7 +238,7 @@ protectedRoutes.get('/menus', async (c) => {
     
     const menus = await db.select()
       .from(menuSchema.menuUploads)
-      .where(eq(menuSchema.menuUploads.userId, user.uid))
+      .where(eq(menuSchema.menuUploads.userId, user.id))
       .orderBy(desc(menuSchema.menuUploads.createdAt));
     
     return c.json({
@@ -263,7 +266,7 @@ protectedRoutes.get('/menus/:id', async (c) => {
       .from(menuSchema.menuUploads)
       .where(eq(menuSchema.menuUploads.id, menuId));
     
-    if (!menu.length || menu[0].userId !== user.uid) {
+    if (!menu.length || menu[0].userId !== user.id) {
       return c.json({
         success: false,
         error: 'Menu not found or access denied',
@@ -285,6 +288,187 @@ protectedRoutes.get('/menus/:id', async (c) => {
     return c.json({
       success: false,
       error: 'Failed to retrieve menu',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    }, 500);
+  }
+});
+
+// Restaurant management endpoints
+protectedRoutes.post('/restaurants', async (c) => {
+  try {
+    const user = c.get('user');
+    const body = await c.req.json();
+    const db = await getDatabase();
+    
+    // Generate ID
+    const id = `restaurant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const restaurantData = {
+      id,
+      userId: user.id,
+      name: body.name,
+      url: body.url,
+      address: body.address,
+      city: body.city,
+      country: body.country,
+      restaurantType: body.restaurantType,
+      cuisines: body.cuisines,
+      phoneNumber: body.phoneNumber,
+      description: body.description,
+    };
+    
+    const result = await db.insert(restaurantSchema.restaurants).values(restaurantData).returning();
+    
+    return c.json({
+      success: true,
+      restaurant: result[0],
+      message: 'Restaurant created successfully',
+    });
+  } catch (error) {
+    console.error('Restaurant creation error:', error);
+    return c.json({
+      success: false,
+      error: 'Failed to create restaurant',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    }, 500);
+  }
+});
+
+// Get user's restaurants
+protectedRoutes.get('/restaurants', async (c) => {
+  try {
+    const user = c.get('user');
+    const db = await getDatabase();
+    
+    // Filter restaurants by user
+    const restaurants = await db.select()
+      .from(restaurantSchema.restaurants)
+      .where(eq(restaurantSchema.restaurants.userId, user.id))
+      .orderBy(desc(restaurantSchema.restaurants.createdAt));
+    
+    return c.json({
+      success: true,
+      restaurants,
+    });
+  } catch (error) {
+    console.error('Get restaurants error:', error);
+    return c.json({
+      success: false,
+      error: 'Failed to retrieve restaurants',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    }, 500);
+  }
+});
+
+// Get restaurant's menus
+protectedRoutes.get('/restaurants/:id/menus', async (c) => {
+  try {
+    const user = c.get('user');
+    const restaurantId = c.req.param('id');
+    const db = await getDatabase();
+    
+    const menus = await db.select()
+      .from(menuSchema.menuUploads)
+      .where(eq(menuSchema.menuUploads.restaurantId, restaurantId))
+      .orderBy(desc(menuSchema.menuUploads.createdAt));
+    
+    return c.json({
+      success: true,
+      menus,
+    });
+  } catch (error) {
+    console.error('Get restaurant menus error:', error);
+    return c.json({
+      success: false,
+      error: 'Failed to retrieve restaurant menus',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    }, 500);
+  }
+});
+
+// URL-based menu parsing endpoint
+protectedRoutes.post('/menus/parse-url', async (c) => {
+  try {
+    const user = c.get('user');
+    const body: UrlUploadData = await c.req.json();
+    const db = await getDatabase();
+    
+    // First, create or find the restaurant
+    let restaurantId = body.restaurant.name ? 
+      `restaurant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` : 
+      null;
+    
+    if (restaurantId) {
+      const restaurantData = {
+        id: restaurantId,
+        userId: user.id,
+        name: body.restaurant.name,
+        url: body.url,
+        address: body.restaurant.address,
+        city: body.restaurant.city,
+        country: body.restaurant.country,
+        restaurantType: body.restaurant.restaurantType,
+        cuisines: body.restaurant.cuisines,
+        phoneNumber: body.restaurant.phoneNumber,
+        description: body.restaurant.description,
+      };
+      
+      await db.insert(restaurantSchema.restaurants).values(restaurantData);
+    }
+    
+    // Create menu upload record for URL parsing
+    const menuId = `menu_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const menuData = {
+      id: menuId,
+      userId: user.id,
+      restaurantId,
+      fileName: null,
+      originalFileName: null,
+      fileSize: null,
+      mimeType: null,
+      fileUrl: body.url,
+      sourceUrl: body.url,
+      parseMethod: null, // Will be determined by parser
+      status: 'processing',
+    };
+    
+    const menuResult = await db.insert(menuSchema.menuUploads).values(menuData).returning();
+    
+    // Create restaurant menu source record for tracking
+    const sourceId = `source_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const sourceData = {
+      id: sourceId,
+      restaurantId: restaurantId || '',
+      userId: user.id,
+      url: body.url,
+      sourceType: 'html' as const, // Default to HTML, parser will update
+      documentType: null,
+      status: 'pending' as const,
+      errorMessage: null,
+      lastAttemptedAt: null,
+      successfullyParsedAt: null,
+      parseMethod: null,
+      confidence: null,
+    };
+    
+    await db.insert(restaurantSchema.restaurantMenuSources).values(sourceData);
+    
+    // Enqueue parsing job
+    const jobId = await parseQueue.enqueueParseJob(sourceId);
+    
+    return c.json({
+      success: true,
+      menuId: menuResult[0].id,
+      restaurantId,
+      sourceId,
+      jobId,
+      message: 'URL parsing job queued successfully',
+    });
+  } catch (error) {
+    console.error('URL parsing error:', error);
+    return c.json({
+      success: false,
+      error: 'Failed to start URL parsing',
       details: error instanceof Error ? error.message : 'Unknown error',
     }, 500);
   }

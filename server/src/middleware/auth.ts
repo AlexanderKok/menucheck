@@ -25,7 +25,7 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
     const databaseUrl = getDatabaseUrl();
     const db = await getDatabase(databaseUrl);
 
-    // Upsert: insert if not exists, do nothing if exists
+    // Upsert: insert if not exists, do nothing if unique constraint (email) conflicts
     await db.insert(users)
       .values({
         id: firebaseUser.id,
@@ -35,11 +35,22 @@ export const authMiddleware: MiddlewareHandler = async (c, next) => {
       })
       .onConflictDoNothing();
 
-    // Get the user (either just created or already existing)
-    const [user] = await db.select()
+    // Try to get by id first
+    let [user] = await db.select()
       .from(users)
       .where(eq(users.id, firebaseUser.id))
       .limit(1);
+
+    // If not found (likely email conflict with a different id), fall back to email
+    if (!user && firebaseUser.email) {
+      const byEmail = await db.select()
+        .from(users)
+        .where(eq(users.email, firebaseUser.email))
+        .limit(1);
+      if (byEmail.length) {
+        user = byEmail[0];
+      }
+    }
 
     if (!user) {
       throw new Error('Failed to create or retrieve user');

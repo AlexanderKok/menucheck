@@ -33,22 +33,29 @@ export async function verifyFirebaseToken(token: string, projectId: string): Pro
   // In emulator mode, use simplified token verification
   if (isDevelopment()) {
     try {
-      // Decode the token without verification for emulator
+      // Decode the token without verification for emulator (base64url-safe)
       const parts = token.split('.');
       if (parts.length !== 3) {
         throw new Error('Invalid token format');
       }
-      
-      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-      
-      // Basic validation for emulator tokens
-      if (!payload.sub || !payload.aud || payload.aud !== projectId) {
-        throw new Error('Invalid token payload');
+
+      const base64Url = parts[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64 + '==='.slice((base64.length + 3) % 4);
+      const json = Buffer.from(padded, 'base64').toString('utf8');
+      const payload = JSON.parse(json);
+
+      // Basic validation for emulator tokens: require subject and email in dev
+      if (!payload.sub) {
+        throw new Error('Invalid token payload (missing sub)');
       }
-      
+      if (!payload.email) {
+        throw new Error('Invalid token payload (missing email). Ensure emulator issues tokens with email');
+      }
+
       return {
         id: payload.sub as string,
-        email: payload.email as string | undefined,
+        email: payload.email as string,
       };
     } catch (error) {
       throw new Error('Invalid emulator token');

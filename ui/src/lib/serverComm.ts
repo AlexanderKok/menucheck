@@ -53,13 +53,9 @@ export async function getCurrentUser() {
 
 // Menu Insights API endpoints
 export async function uploadMenu(menuData: {
-  fileName: string;
-  originalFileName: string;
-  fileSize: number;
-  mimeType: string;
-  fileUrl?: string;
+  file?: { name: string; size: number; type: string; content: string };
 }) {
-  const response = await fetchWithAuth('/api/v1/protected/menus/upload', {
+  const response = await fetchWithAuth('/api/v1/protected/upload-menu', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

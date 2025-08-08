@@ -85,12 +85,26 @@ export function MenuUpload({
         );
 
         try {
-          // Call the actual API
+          // Convert file to base64 (without data URL prefix)
+          const fileContent = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = reader.result as string;
+              const base64Content = result.includes(',') ? result.split(',')[1] : result;
+              resolve(base64Content);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+
+          // Call the authenticated upload API with file content
           const result = await api.uploadMenu({
-            fileName: fileId,
-            originalFileName: file.name,
-            fileSize: file.size,
-            mimeType: file.type,
+            file: {
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              content: fileContent,
+            }
           });
 
           if (result.success) {

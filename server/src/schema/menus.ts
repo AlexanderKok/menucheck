@@ -104,8 +104,6 @@ export const menuRecommendations = appSchema.table('menu_recommendations', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// Import users for foreign key reference
-import { users } from './users';
 
 export type MenuUpload = typeof menuUploads.$inferSelect;
 export type NewMenuUpload = typeof menuUploads.$inferInsert;

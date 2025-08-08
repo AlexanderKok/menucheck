@@ -61,40 +61,74 @@ export function MenuInsights() {
     }
   }, [user]);
 
+  // Helper function to safely parse numeric values
+  const safeParseFloat = (value: any, defaultValue: number = 0): number => {
+    if (value === null || value === undefined) return defaultValue;
+    const parsed = typeof value === 'string' ? parseFloat(value) : Number(value);
+    return isNaN(parsed) ? defaultValue : parsed;
+  };
+
+  // Helper function to validate and structure menu data
+  const validateMenuData = (menu: any): MenuAnalysis | null => {
+    try {
+      // Basic validation - ensure required fields exist
+      if (!menu.id || !menu.createdAt) {
+        console.warn('Menu missing required fields:', menu);
+        return null;
+      }
+
+      // Safely extract analysis data
+      const analysisData = menu.analysisData || {};
+      const categories = Array.isArray(analysisData.categories) ? analysisData.categories : [];
+      const recommendations = Array.isArray(analysisData.recommendations) ? analysisData.recommendations : [];
+
+      return {
+        id: String(menu.id),
+        fileName: menu.originalFileName || menu.fileName || 'Unknown Menu',
+        uploadDate: menu.createdAt,
+        status: menu.status || 'processing',
+        insights: {
+          totalItems: safeParseFloat(menu.totalItems),
+          avgPrice: safeParseFloat(menu.avgPrice),
+          priceRange: { 
+            min: safeParseFloat(menu.minPrice), 
+            max: safeParseFloat(menu.maxPrice) 
+          },
+          categories,
+          recommendations,
+          metrics: {
+            profitabilityScore: safeParseFloat(menu.profitabilityScore),
+            readabilityScore: safeParseFloat(menu.readabilityScore),
+            pricingOptimization: safeParseFloat(menu.pricingOptimizationScore),
+            categoryBalance: safeParseFloat(menu.categoryBalanceScore)
+          }
+        }
+      };
+    } catch (error) {
+      console.error('Error validating menu data:', error, menu);
+      return null;
+    }
+  };
+
   const loadUserMenus = async () => {
     try {
       setLoading(true);
       const result = await api.getUserMenus();
       
-      if (result.success) {
-        // Transform API data to match our interface
-        const transformedAnalyses: MenuAnalysis[] = result.menus.map((menu: any) => ({
-          id: menu.id,
-          fileName: menu.originalFileName || menu.fileName,
-          uploadDate: menu.createdAt,
-          status: menu.status,
-          insights: {
-            totalItems: menu.totalItems || 0,
-            avgPrice: parseFloat(menu.avgPrice || '0'),
-            priceRange: { 
-              min: parseFloat(menu.minPrice || '0'), 
-              max: parseFloat(menu.maxPrice || '0') 
-            },
-            categories: menu.analysisData?.categories || [],
-            recommendations: menu.analysisData?.recommendations || [],
-            metrics: {
-              profitabilityScore: menu.profitabilityScore || 0,
-              readabilityScore: menu.readabilityScore || 0,
-              pricingOptimization: menu.pricingOptimizationScore || 0,
-              categoryBalance: menu.categoryBalanceScore || 0
-            }
-          }
-        }));
+      if (result.success && Array.isArray(result.menus)) {
+        // Transform API data with validation
+        const transformedAnalyses: MenuAnalysis[] = result.menus
+          .map(validateMenuData)
+          .filter((analysis: MenuAnalysis | null): analysis is MenuAnalysis => analysis !== null);
         
         setAnalyses(transformedAnalyses);
+      } else {
+        console.warn('Invalid API response format:', result);
+        setAnalyses([]);
       }
     } catch (error) {
       console.error('Error loading menus:', error);
+      setAnalyses([]);
     } finally {
       setLoading(false);
     }
@@ -182,7 +216,7 @@ export function MenuInsights() {
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
               <p className="mt-4 text-muted-foreground">Loading menu analyses...</p>
             </div>
-          ) : analyses.length > 0 ? (
+          ) : analyses.length > 0 && analyses[0]?.insights ? (
             <>
               {/* Metrics Overview */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

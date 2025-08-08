@@ -52,6 +52,8 @@ export interface ParseJob {
   completedAt?: Date;
   errorMessage?: string;
   retryCount: number;
+  userId?: string; // Optional for public uploads
+  isPublic?: boolean; // Flag for public uploads
 }
 
 export type ParseStrategy = 'html' | 'pdf_digital' | 'pdf_ocr' | 'javascript';
@@ -82,4 +84,36 @@ export interface RestaurantMenuSourceData {
   errorMessage?: string;
   lastAttemptedAt?: Date;
   successfullyParsedAt?: Date;
+}
+
+// Public upload data interfaces
+export interface PublicUploadData {
+  url?: string; // For URL uploads
+  file?: {
+    name: string;
+    size: number;
+    type: string;
+    content?: string; // Base64 for file uploads
+  };
+  recaptchaToken: string;
+}
+
+export interface PublicRestaurantData {
+  uploadId: string;
+  restaurantName: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  restaurantType?: string;
+  cuisines?: string[];
+  phoneNumber?: string;
+  description?: string;
+}
+
+// Rate limiting interfaces
+export interface RateLimitInfo {
+  allowed: boolean;
+  requestsRemaining: number;
+  resetTime: Date;
+  retryAfter?: number; // seconds until next request allowed
 }

@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useTranslation } from 'react-i18next';
 import { Upload, Link, CheckCircle, AlertCircle, ChefHat, Zap, Shield } from 'lucide-react';
 import ReCAPTCHA from 'react-google-recaptcha';
+import { uploadPublicMenu, parsePublicUrl } from '@/lib/serverComm';
 
 export function PublicUpload() {
   const { t } = useTranslation();
@@ -31,6 +32,12 @@ export function PublicUpload() {
   };
 
   const handleFileUpload = async (files: File[]) => {
+    if (files.length === 0) {
+      return;
+    }
+
+    const file = files[0];
+    
     // Skip reCAPTCHA in development mode or if no site key is configured
     const isDev = import.meta.env.DEV || !import.meta.env.VITE_RECAPTCHA_SITE_KEY;
     
@@ -46,32 +53,59 @@ export function PublicUpload() {
     setUploadResult(null);
 
     try {
-      // Simulate upload process - in real implementation, this would call the API
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      let response;
       
-      setUploadResult({
-        success: true,
-        message: user 
-          ? t('publicUpload.uploadSuccess', 'Upload successful! Check your dashboard for analysis results.')
-          : t('publicUpload.uploadSuccessPublic', 'Upload successful! Your menu is being analyzed. Results will be available shortly.')
-      });
+      if (user) {
+        // For authenticated users, use the existing authenticated upload
+        // TODO: Implement authenticated file upload
+        throw new Error('Authenticated upload not implemented yet');
+      } else {
+        // For public uploads, use the public API
+        const recaptchaToken = recaptchaRef.current?.getValue() || 'dev-token';
+        response = await uploadPublicMenu(file, recaptchaToken);
+      }
+      
+      if (response.success) {
+        if (user) {
+          setUploadResult({
+            success: true,
+            message: t('publicUpload.uploadSuccess', 'Upload successful! Check your dashboard for analysis results.')
+          });
+        } else {
+          // Redirect to restaurant details page for public uploads
+          navigate(`/restaurant-details/${response.uploadId}`);
+        }
+      } else {
+        setUploadResult({
+          success: false,
+          message: response.message || t('publicUpload.uploadError', 'Upload failed. Please try again.')
+        });
+      }
 
       // Reset reCAPTCHA for next upload
       if (!user) {
         recaptchaRef.current?.reset();
         setRecaptchaVerified(false);
       }
-    } catch (error) {
+    } catch (error: any) {
+      let errorMessage = t('publicUpload.uploadError', 'Upload failed. Please try again.');
+      
+      if (error.status === 429) {
+        errorMessage = t('publicUpload.rateLimitError', 'Too many uploads. Please wait before trying again.');
+      } else if (error.message?.includes('reCAPTCHA')) {
+        errorMessage = t('publicUpload.recaptchaError', 'reCAPTCHA verification failed. Please try again.');
+      }
+      
       setUploadResult({
         success: false,
-        message: t('publicUpload.uploadError', 'Upload failed. Please try again.')
+        message: errorMessage
       });
     } finally {
       setUploadInProgress(false);
     }
   };
 
-  const handleUrlUpload = async (urlData: any) => {
+  const handleUrlUpload = async (urlData: { url: string }) => {
     // Skip reCAPTCHA in development mode or if no site key is configured
     const isDev = import.meta.env.DEV || !import.meta.env.VITE_RECAPTCHA_SITE_KEY;
     
@@ -87,25 +121,52 @@ export function PublicUpload() {
     setUploadResult(null);
 
     try {
-      // Simulate upload process - in real implementation, this would call the API
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      let response;
       
-      setUploadResult({
-        success: true,
-        message: user 
-          ? t('publicUpload.uploadSuccess', 'Upload successful! Check your dashboard for analysis results.')
-          : t('publicUpload.uploadSuccessPublic', 'Upload successful! Your menu is being analyzed. Results will be available shortly.')
-      });
+      if (user) {
+        // For authenticated users, use the existing authenticated URL parsing
+        // TODO: Implement authenticated URL upload with restaurant data
+        throw new Error('Authenticated URL upload not implemented yet');
+      } else {
+        // For public uploads, use the public API
+        const recaptchaToken = recaptchaRef.current?.getValue() || 'dev-token';
+        response = await parsePublicUrl(urlData.url, recaptchaToken);
+      }
+      
+      if (response.success) {
+        if (user) {
+          setUploadResult({
+            success: true,
+            message: t('publicUpload.uploadSuccess', 'Upload successful! Check your dashboard for analysis results.')
+          });
+        } else {
+          // Redirect to restaurant details page for public uploads
+          navigate(`/restaurant-details/${response.uploadId}`);
+        }
+      } else {
+        setUploadResult({
+          success: false,
+          message: response.message || t('publicUpload.uploadError', 'URL parsing failed. Please try again.')
+        });
+      }
 
       // Reset reCAPTCHA for next upload
       if (!user) {
         recaptchaRef.current?.reset();
         setRecaptchaVerified(false);
       }
-    } catch (error) {
+    } catch (error: any) {
+      let errorMessage = t('publicUpload.uploadError', 'URL parsing failed. Please try again.');
+      
+      if (error.status === 429) {
+        errorMessage = t('publicUpload.rateLimitError', 'Too many uploads. Please wait before trying again.');
+      } else if (error.message?.includes('reCAPTCHA')) {
+        errorMessage = t('publicUpload.recaptchaError', 'reCAPTCHA verification failed. Please try again.');
+      }
+      
       setUploadResult({
         success: false,
-        message: t('publicUpload.uploadError', 'Upload failed. Please try again.')
+        message: errorMessage
       });
     } finally {
       setUploadInProgress(false);
@@ -232,7 +293,7 @@ export function PublicUpload() {
                 {!user && (import.meta.env.DEV || !import.meta.env.VITE_RECAPTCHA_SITE_KEY) && (
                   <div className="text-center mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                     <p className="text-sm text-yellow-800">
-                      🔧 Development Mode: reCAPTCHA verificatie is uitgeschakeld
+                      🔧 {t('publicUpload.devMode', 'Development Mode: reCAPTCHA verification is disabled')}
                     </p>
                   </div>
                 )}

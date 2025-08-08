@@ -173,6 +173,103 @@ export async function submitConsultation(consultationData: {
   return response.json();
 }
 
+// Public API endpoints (no authentication required)
+export async function uploadPublicMenu(file: File, recaptchaToken: string) {
+  // Convert file to base64 for transfer
+  const fileContent = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Remove the data URL prefix (e.g., "data:application/pdf;base64,")
+      const base64Content = result.split(',')[1];
+      resolve(base64Content);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const fileData = {
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    content: fileContent
+  };
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/public/upload-menu`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      file: fileData,
+      recaptchaToken,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new APIError(
+      response.status,
+      errorData.message || `Public menu upload failed: ${response.statusText}`
+    );
+  }
+
+  return response.json();
+}
+
+export async function parsePublicUrl(url: string, recaptchaToken: string) {
+  const response = await fetch(`${API_BASE_URL}/api/v1/public/parse-url`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      url,
+      recaptchaToken,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new APIError(
+      response.status,
+      errorData.message || `Public URL parsing failed: ${response.statusText}`
+    );
+  }
+
+  return response.json();
+}
+
+export async function requestPublicReport(restaurantData: {
+  uploadId: string;
+  restaurantName: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  restaurantType?: string;
+  cuisines?: string[];
+  phoneNumber?: string;
+  description?: string;
+}) {
+  const response = await fetch(`${API_BASE_URL}/api/v1/public/request-report`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(restaurantData),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new APIError(
+      response.status,
+      errorData.message || `Report request failed: ${response.statusText}`
+    );
+  }
+
+  return response.json();
+}
+
 export const api = {
   getCurrentUser,
   uploadMenu,
@@ -183,4 +280,8 @@ export const api = {
   getRestaurants,
   getRestaurantMenus,
   submitConsultation,
+  // Public API methods
+  uploadPublicMenu,
+  parsePublicUrl,
+  requestPublicReport,
 }; 

@@ -1,11 +1,13 @@
 import { pgTable, text, timestamp, integer, jsonb, boolean, decimal } from 'drizzle-orm/pg-core';
-import { appSchema } from './users';
+import { appSchema, users } from './users';
 import { restaurants } from './restaurants';
 
 export const menuUploads = appSchema.table('menu_uploads', {
   id: text('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }), // Allow null for public uploads
   restaurantId: text('restaurant_id').references(() => restaurants.id, { onDelete: 'set null' }),
+  ipAddress: text('ip_address'), // For public upload tracking
+  expiresAt: timestamp('expires_at'), // For public upload cleanup
   fileName: text('file_name'),
   originalFileName: text('original_file_name'),
   fileSize: integer('file_size'), // in bytes

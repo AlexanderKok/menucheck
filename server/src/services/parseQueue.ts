@@ -20,7 +20,7 @@ export class ParseQueue {
   /**
    * Add a new URL parsing job to the queue
    */
-  async enqueueParseJob(restaurantMenuSourceId: string): Promise<string> {
+  async enqueueParseJob(restaurantMenuSourceId: string, isPublic: boolean = false): Promise<string> {
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     const job: ParseJob = {
@@ -28,7 +28,8 @@ export class ParseQueue {
       restaurantMenuSourceId,
       status: 'pending',
       createdAt: new Date(),
-      retryCount: 0
+      retryCount: 0,
+      isPublic
     };
 
     this.queue.push(job);
@@ -112,12 +113,32 @@ export class ParseQueue {
       const parseResult = await urlParser.parseUrl(source.url, strategy);
 
       if (parseResult.success && parseResult.menuItems.length > 0) {
-        // Create menu upload record
-        const menuId = `menu_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        // Check if a menu upload record already exists for this source URL (for public uploads)
+        let menuId: string;
+        let existingMenu = null;
+        
+        if (job.isPublic) {
+          // For public uploads, find existing menu by source URL
+          const existingMenus = await db.select()
+            .from(menuSchema.menuUploads)
+            .where(eq(menuSchema.menuUploads.sourceUrl, source.url))
+            .limit(1);
+          
+          if (existingMenus.length > 0) {
+            existingMenu = existingMenus[0];
+            menuId = existingMenu.id;
+          }
+        }
+        
+        if (!existingMenu) {
+          // Create new menu upload record
+          menuId = `menu_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        }
+        
         const menuData = {
           id: menuId,
-          userId: source.userId,
-          restaurantId: source.restaurantId,
+          userId: source.userId || null, // Allow null for public uploads
+          restaurantId: source.restaurantId || null,
           fileName: null,
           originalFileName: null,
           fileSize: null,
@@ -148,7 +169,15 @@ export class ParseQueue {
           }
         };
 
-        await db.insert(menuSchema.menuUploads).values(menuData);
+        if (existingMenu) {
+          // Update existing menu upload record
+          await db.update(menuSchema.menuUploads)
+            .set(menuData)
+            .where(eq(menuSchema.menuUploads.id, menuId));
+        } else {
+          // Insert new menu upload record
+          await db.insert(menuSchema.menuUploads).values(menuData);
+        }
 
         // Create menu categories and build category mapping
         const categoryMap: Record<string, string> = {};

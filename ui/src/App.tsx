@@ -10,9 +10,10 @@ import { MenuInsights } from '@/pages/MenuInsights';
 import { ConsultationDemo } from '@/pages/ConsultationDemo';
 import { Login } from '@/pages/Login';
 import { PublicUpload } from '@/pages/PublicUpload';
+import { RestaurantDetails } from '@/pages/RestaurantDetails';
 import { Hero } from '@/components/Hero';
 import { Header } from '@/components/Header';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import {
   SidebarProvider,
   SidebarInset,
@@ -20,6 +21,7 @@ import {
 
 function AppContent() {
   const { user, loading } = useAuth();
+  const navigate = useNavigate();
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen"></div>;
@@ -33,11 +35,11 @@ function AppContent() {
           <Route path="/" element={
             <div className="min-h-screen bg-background">
               <Header 
-                onSignIn={() => window.location.href = '/login'}
-                onGetStarted={() => window.location.href = '/upload'}
+                onSignIn={() => navigate('/login')}
+                onGetStarted={() => navigate('/upload')}
               />
               <Hero 
-                onGetStarted={() => window.location.href = '/upload'}
+                onGetStarted={() => navigate('/upload')}
                 onLearnMore={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
               />
             </div>
@@ -48,6 +50,9 @@ function AppContent() {
           
           {/* Public upload route */}
           <Route path="/upload" element={<PublicUpload />} />
+          
+          {/* Restaurant details route for public uploads */}
+          <Route path="/restaurant-details/:uploadId" element={<RestaurantDetails />} />
           
           {/* Public routes */}
           <Route path="/menu-insights" element={<MenuInsights />} />

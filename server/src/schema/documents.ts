@@ -1,24 +1,32 @@
-import { pgTable, text, timestamp, integer, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, integer, jsonb, index } from 'drizzle-orm/pg-core';
 import { appSchema, users } from './users';
 
 // Universal documents table for uploads and URLs
-export const documents = appSchema.table('documents', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  originalName: text('original_name'),
-  mimeType: text('mime_type'),
-  fileSize: integer('file_size'),
-  storagePath: text('storage_path'), // Local path or URL
-  sourceType: text('source_type'), // 'upload' | 'url'
-  sourceUrl: text('source_url'), // Original URL if applicable
-  documentType: text('document_type'), // Detected via content sniffing
+export const documents = appSchema.table(
+  'documents',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    originalName: text('original_name'),
+    mimeType: text('mime_type'),
+    fileSize: integer('file_size'),
+    storagePath: text('storage_path'), // Local path or URL
+    sourceType: text('source_type'), // 'upload' | 'url'
+    sourceUrl: text('source_url'), // Original URL if applicable
+    documentType: text('document_type'), // Detected via content sniffing
 
-  status: text('status').notNull().default('uploaded'),
-  statusReason: text('status_reason'),
+    status: text('status').notNull().default('uploaded'),
+    statusReason: text('status_reason'),
 
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    idxDocumentsUserId: index('idx_documents_user_id').on(table.userId),
+    idxDocumentsStatus: index('idx_documents_status').on(table.status),
+    idxDocumentsSourceType: index('idx_documents_source_type').on(table.sourceType),
+  })
+);
 
 export const parseRuns = appSchema.table('parse_runs', {
   id: text('id').primaryKey(),

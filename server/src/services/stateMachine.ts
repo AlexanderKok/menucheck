@@ -14,7 +14,7 @@ const validTransitions: Record<DocumentStatus, DocumentStatus[]> = {
   parsed: ['analyzing', 'failed_analysis'],
   analyzing: ['analyzed', 'failed_analysis'],
   analyzed: ['done'],
-  done: ['analyzing'],
+  done: [],
   failed_parsing: ['queued'],
   failed_analysis: ['analyzing'],
 };

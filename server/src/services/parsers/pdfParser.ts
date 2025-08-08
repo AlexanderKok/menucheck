@@ -5,13 +5,13 @@ import type { ParseResult } from '../../types/url-parsing';
  * Basic implementation for testing - creates mock menu items
  */
 export async function parseDigitalPdf(url: string, fileContent?: string): Promise<ParseResult> {
-  console.log('Processing PDF file for testing...');
+  console.log('Processing PDF file (mock implementation)...');
   
   // For testing purposes with Café Constant, we'll create some realistic menu items
   // In production, this would use a proper PDF parsing library like pdf-parse
   
   try {
-    // Mock some realistic French café menu items based on the filename
+    // Mock items for now; to be replaced by layout-aware PDF.js parsing in Phase 4
     const mockMenuItems = [
       {
         name: "Café Expresso",

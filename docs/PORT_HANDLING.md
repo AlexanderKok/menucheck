@@ -1,5 +1,16 @@
 # Port Handling in volo-app
 
+## PDF utilities (Poppler)
+
+- macOS: install with Homebrew: `brew install poppler`
+- Tools used: `pdfinfo`, `pdftotext`, `pdftoppm`
+
+## Uploads directory
+
+- Local filesystem path defaults to `server/uploads/documents`
+- Override with env: `UPLOADS_ROOT=/absolute/path`
+- Ensure `server/uploads/` is gitignored
+
 ## Overview
 
 volo-app automatically handles port assignments to prevent conflicts and enable running multiple instances simultaneously. The system uses **smart port detection** with **graceful fallbacks** to ensure your development environment works seamlessly.

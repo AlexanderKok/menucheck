@@ -114,8 +114,8 @@ export class ParseQueue {
 
       if (parseResult.success && parseResult.menuItems.length > 0) {
         // Check if a menu upload record already exists for this source URL (for public uploads)
-        let menuId: string;
-        let existingMenu = null;
+        let menuId: string | null = null;
+        let existingMenu: any = null;
         
         if (job.isPublic) {
           // For public uploads, find existing menu by source URL
@@ -136,7 +136,7 @@ export class ParseQueue {
         }
         
         const menuData = {
-          id: menuId,
+          id: menuId!,
           userId: source.userId || null, // Allow null for public uploads
           restaurantId: source.restaurantId || null,
           fileName: null,
@@ -162,6 +162,7 @@ export class ParseQueue {
           processingStartedAt: job.startedAt,
           processingCompletedAt: new Date(),
           analysisData: {
+            // Do not store raw file bytes here
             categories: parseResult.categories,
             menuItems: parseResult.menuItems,
             parseMethod: parseResult.parseMethod,
@@ -173,7 +174,7 @@ export class ParseQueue {
           // Update existing menu upload record
           await db.update(menuSchema.menuUploads)
             .set(menuData)
-            .where(eq(menuSchema.menuUploads.id, menuId));
+            .where(eq(menuSchema.menuUploads.id, menuId!));
         } else {
           // Insert new menu upload record
           await db.insert(menuSchema.menuUploads).values(menuData);
@@ -190,7 +191,7 @@ export class ParseQueue {
 
           await db.insert(menuSchema.menuCategories).values({
             id: categoryId,
-            menuId,
+            menuId: menuId!,
             name: categoryName,
             itemCount: categoryItems.length,
             avgPrice: categoryItems.length > 0 ? 
@@ -220,7 +221,7 @@ export class ParseQueue {
 
           await db.insert(menuSchema.menuItems).values({
             id: itemId,
-            menuId,
+            menuId: menuId!,
             categoryId,
             name: item.name,
             description: item.description,

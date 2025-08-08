@@ -22,7 +22,9 @@
     "fs-extra": "^11.2.0",
     "hono": "^4.0.5",
     "jose": "^5.2.3",
-    "postgres": "^3.4.7"
+    "pdfjs-dist": "^5.4.54",
+    "postgres": "^3.4.7",
+    "tesseract.js": "^6.0.1"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240208.0",

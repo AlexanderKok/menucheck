@@ -12,7 +12,11 @@ import * as consultationSchema from './schema/consultations';
 import * as publicUploadSchema from './schema/publicUploads';
 import { eq, desc } from 'drizzle-orm';
 import type { UrlUploadData, PublicUploadData, PublicRestaurantData } from './types/url-parsing';
+import { triageDocument } from './services/documentTriage';
 import { parseQueue } from './services/parseQueue';
+import { parseQueueV2 } from './services/parseQueueV2';
+import { analysisQueue } from './services/analysisQueue';
+import { transitionDocumentStatus } from './services/stateMachine';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 
 type Env = {
@@ -121,15 +125,31 @@ publicRoutes.post('/upload-menu', async (c) => {
         message: 'Please provide a file to upload'
       }, 400);
     }
+    if (!body.file.content) {
+      return c.json({
+        success: false,
+        error: 'No file content',
+        message: 'Uploaded file content is missing'
+      }, 400);
+    }
+
+    // Enforce upload size limit (10 MB)
+    const maxSizeBytes = 10 * 1024 * 1024;
+    if (typeof body.file.size === 'number' && body.file.size > maxSizeBytes) {
+      return c.json({
+        success: false,
+        error: 'File too large',
+        message: 'Maximum upload size is 10 MB'
+      }, 413);
+    }
 
     const db = await getDatabase();
     
     // Create menu upload record for public upload
     const menuId = `menu_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const expiresAt = new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)); // 7 days
+    const expiresAt: Date = new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)); // 7 days
     
-    // For now, we'll store the file content in the analysisData as base64
-    // In production, you'd want to save this to file storage (S3, etc.)
+    // Create a menu upload record for tracking (no raw bytes stored)
     const menuData = {
       id: menuId,
       userId: null, // Public upload
@@ -142,12 +162,8 @@ publicRoutes.post('/upload-menu', async (c) => {
       mimeType: body.file.type,
       fileUrl: null,
       sourceUrl: null,
-      parseMethod: 'pdf_digital',
-      status: 'processing', // Start as processing since we have the file
-      analysisData: {
-        fileContent: body.file.content, // Store base64 content temporarily
-        uploadedAt: new Date().toISOString()
-      }
+      parseMethod: null,
+      status: 'processing'
     };
     
     const menuResult = await db.insert(menuSchema.menuUploads).values(menuData).returning();
@@ -165,90 +181,27 @@ publicRoutes.post('/upload-menu', async (c) => {
     
     await db.insert(publicUploadSchema.publicUploads).values(publicUploadData);
     
-    // Process the PDF file immediately for testing
+    // Unified pipeline: triage the uploaded file into documents and return documentId & strategy
+    const triage = await triageDocument({
+      type: 'file',
+      source: { content: body.file.content!, mimeType: body.file.type, name: body.file.name }
+    });
+    // Enqueue parse job (V2) and set status queued
     try {
-      const { parseDigitalPdf } = await import('./services/parsers/pdfParser');
-      const parseResult = await parseDigitalPdf('', body.file.content);
-      
-      if (parseResult.success) {
-        // Update menu with parsed results
-        const analysisData = {
-          ...menuData.analysisData,
-          parseResult,
-          categories: parseResult.categories,
-          menuItems: parseResult.menuItems
-        };
-        
-        // Calculate basic metrics
-        const totalItems = parseResult.menuItems.length;
-        const avgPrice = parseResult.menuItems.length > 0 
-          ? (parseResult.menuItems.reduce((sum, item) => sum + item.price, 0) / parseResult.menuItems.length).toFixed(2)
-          : '0';
-        const minPrice = parseResult.menuItems.length > 0 
-          ? Math.min(...parseResult.menuItems.map(item => item.price)).toFixed(2)
-          : '0';
-        const maxPrice = parseResult.menuItems.length > 0 
-          ? Math.max(...parseResult.menuItems.map(item => item.price)).toFixed(2)
-          : '0';
-        
-        await db.update(menuSchema.menuUploads)
-          .set({
-            status: 'completed',
-            totalItems,
-            avgPrice,
-            minPrice,
-            maxPrice,
-            profitabilityScore: 75,
-            readabilityScore: 80,
-            pricingOptimizationScore: 70,
-            categoryBalanceScore: 85,
-            processingCompletedAt: new Date(),
-            analysisData
-          })
-          .where(eq(menuSchema.menuUploads.id, menuId));
-          
-        // Create menu categories
-        for (const categoryName of parseResult.categories) {
-          const categoryId = `category_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          const categoryItems = parseResult.menuItems.filter(item => item.category === categoryName);
-          
-          await db.insert(menuSchema.menuCategories).values({
-            id: categoryId,
-            menuId,
-            name: categoryName,
-            itemCount: categoryItems.length,
-            avgPrice: categoryItems.length > 0 
-              ? (categoryItems.reduce((sum, item) => sum + item.price, 0) / categoryItems.length).toString()
-              : '0'
-          });
-        }
-        
-        // Create menu items
-        for (const item of parseResult.menuItems) {
-          const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          
-          await db.insert(menuSchema.menuItems).values({
-            id: itemId,
-            menuId,
-            categoryId: null, // Could be linked to categories if needed
-            name: item.name,
-            description: item.description,
-            price: item.price.toString(),
-            currency: item.currency
-          });
-        }
-      }
-    } catch (parseError) {
-      console.error('PDF processing error:', parseError);
-      // Continue with upload success even if parsing fails
-    }
+      await transitionDocumentStatus(triage.documentId, 'queued');
+    } catch {}
+    const parseJobId = parseQueueV2.enqueueParseJob(triage.documentId, 'v1');
     
     return c.json({
       success: true,
       uploadId: publicUploadId,
       menuId,
-      message: 'File uploaded successfully. Please provide restaurant details to receive your analysis.',
-      nextStep: `/restaurant-details/${publicUploadId}`
+      documentId: triage.documentId,
+      documentType: triage.documentType,
+      processingStrategy: triage.processingStrategy,
+      message: 'File received. We will process and analyze it shortly. Please provide restaurant details to receive your analysis.',
+      nextStep: `/restaurant-details/${publicUploadId}`,
+      parseJobId
     });
   } catch (error) {
     console.error('Public menu upload error:', error);
@@ -291,7 +244,7 @@ publicRoutes.post('/parse-url', async (c) => {
     const menuId = `menu_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const expiresAt = new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)); // 7 days
     
-    const menuData = {
+  const menuData = {
       id: menuId,
       userId: null, // Public upload
       restaurantId: null,
@@ -341,14 +294,20 @@ publicRoutes.post('/parse-url', async (c) => {
     
     await db.insert(restaurantSchema.restaurantMenuSources).values(sourceData);
     
-    // Enqueue parsing job
+    // Enqueue parsing job (legacy URL pipeline)
     const jobId = await parseQueue.enqueueParseJob(sourceId, true); // true for public upload
+
+    // Also create a document via triage for unified pipeline tracking
+    const triage = await triageDocument({ type: 'url', source: body.url });
     
     return c.json({
       success: true,
       uploadId: publicUploadId,
       menuId: menuResult[0].id,
       sourceId,
+      documentId: triage.documentId,
+      documentType: triage.documentType,
+      processingStrategy: triage.processingStrategy,
       jobId,
       message: 'URL parsing started. Please provide restaurant details to receive your analysis.',
       nextStep: `/restaurant-details/${publicUploadId}`
@@ -555,6 +514,16 @@ protectedRoutes.post('/upload-menu', async (c) => {
 
     const db = await getDatabase();
 
+    // Enforce upload size limit (10 MB)
+    const maxSizeBytes = 10 * 1024 * 1024;
+    if (typeof body.file.size === 'number' && body.file.size > maxSizeBytes) {
+      return c.json({
+        success: false,
+        error: 'File too large',
+        message: 'Maximum upload size is 10 MB'
+      }, 413);
+    }
+
     // Create menu upload record for authenticated upload
     const menuId = `menu_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -570,97 +539,32 @@ protectedRoutes.post('/upload-menu', async (c) => {
       mimeType: body.file.type,
       fileUrl: null as string | null,
       sourceUrl: null as string | null,
-      parseMethod: 'pdf_digital',
-      status: 'processing' as const,
-      analysisData: {
-        fileContent: body.file.content,
-        uploadedAt: new Date().toISOString()
-      }
+      parseMethod: null,
+      status: 'processing' as const
     };
 
     await db.insert(menuSchema.menuUploads).values(menuData);
 
-    // Process the PDF file immediately for testing (same as public path)
+    // Unified pipeline: triage and create document
+    const triage = await triageDocument({
+      type: 'file',
+      source: { content: body.file.content!, mimeType: body.file.type, name: body.file.name },
+      userId: user.id,
+    });
+    // Enqueue parse job (V2) and set status queued
     try {
-      const { parseDigitalPdf } = await import('./services/parsers/pdfParser');
-      const parseResult = await parseDigitalPdf('', body.file.content);
-
-      if (parseResult.success) {
-        const analysisData = {
-          ...menuData.analysisData,
-          parseResult,
-          categories: parseResult.categories,
-          menuItems: parseResult.menuItems
-        } as any;
-
-        // Calculate basic metrics
-        const totalItems = parseResult.menuItems.length;
-        const avgPrice = parseResult.menuItems.length > 0 
-          ? (parseResult.menuItems.reduce((sum, item) => sum + item.price, 0) / parseResult.menuItems.length).toFixed(2)
-          : '0';
-        const minPrice = parseResult.menuItems.length > 0 
-          ? Math.min(...parseResult.menuItems.map(item => item.price)).toFixed(2)
-          : '0';
-        const maxPrice = parseResult.menuItems.length > 0 
-          ? Math.max(...parseResult.menuItems.map(item => item.price)).toFixed(2)
-          : '0';
-
-        await db.update(menuSchema.menuUploads)
-          .set({
-            status: 'completed',
-            totalItems,
-            avgPrice,
-            minPrice,
-            maxPrice,
-            profitabilityScore: 75,
-            readabilityScore: 80,
-            pricingOptimizationScore: 70,
-            categoryBalanceScore: 85,
-            processingCompletedAt: new Date(),
-            analysisData
-          })
-          .where(eq(menuSchema.menuUploads.id, menuId));
-
-        // Create menu categories
-        for (const categoryName of parseResult.categories) {
-          const categoryId = `category_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          const categoryItems = parseResult.menuItems.filter(item => item.category === categoryName);
-
-          await db.insert(menuSchema.menuCategories).values({
-            id: categoryId,
-            menuId: menuId,
-            name: categoryName,
-            itemCount: categoryItems.length,
-            avgPrice: categoryItems.length > 0 
-              ? (categoryItems.reduce((sum, item) => sum + item.price, 0) / categoryItems.length).toString()
-              : '0'
-          });
-        }
-
-        // Create menu items
-        for (const item of parseResult.menuItems) {
-          const itemId = `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-          await db.insert(menuSchema.menuItems).values({
-            id: itemId,
-            menuId: menuId,
-            categoryId: null,
-            name: item.name,
-            description: item.description,
-            price: item.price.toString(),
-            currency: item.currency
-          });
-        }
-      }
-    } catch (parseError) {
-      console.error('Authenticated PDF processing error:', parseError);
-      // Continue and return success even if parsing fails
-    }
+      await transitionDocumentStatus(triage.documentId, 'queued');
+    } catch {}
+    const parseJobId = parseQueueV2.enqueueParseJob(triage.documentId, 'v1');
 
     return c.json({
       success: true,
       menuId,
-      message: 'File uploaded successfully. Analysis will be available shortly.'
+      documentId: triage.documentId,
+      documentType: triage.documentType,
+      processingStrategy: triage.processingStrategy,
+      message: 'File received. We will process and analyze it shortly.',
+      parseJobId
     });
   } catch (error) {
     console.error('Authenticated menu upload error:', error);
@@ -762,6 +666,7 @@ protectedRoutes.get('/menus', async (c) => {
     const sanitizedMenus = menus.map((menu: any) => {
       if (menu && menu.analysisData && typeof menu.analysisData === 'object') {
         const { fileContent, ...restAnalysis } = menu.analysisData as Record<string, any>;
+        // Ensure raw bytes are removed if accidentally present
         return { ...menu, analysisData: restAnalysis };
       }
       return menu;

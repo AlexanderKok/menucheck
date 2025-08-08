@@ -1,11 +1,9 @@
-import { Context, Next } from 'hono';
+import { Next } from 'hono';
 
-type Variables = {
-  clientIP?: string;
-};
+type Variables = { clientIP?: string };
 import { getDatabase } from '../lib/db';
 import { rateLimitTracker } from '../schema/publicUploads';
-import { eq, and, gte } from 'drizzle-orm';
+import { eq, and, gte, lt } from 'drizzle-orm';
 import type { RateLimitInfo } from '../types/url-parsing';
 
 const RATE_LIMIT_WINDOW_HOURS = 1;
@@ -14,7 +12,7 @@ const RATE_LIMIT_MAX_REQUESTS = 30;
 /**
  * Get client IP address from request headers
  */
-function getClientIP(c: Context<any, any, Variables>): string {
+function getClientIP(c: any): string {
   // Check common headers for real IP (reverse proxy/load balancer scenarios)
   const forwardedFor = c.req.header('x-forwarded-for');
   const realIP = c.req.header('x-real-ip');
@@ -156,7 +154,7 @@ export async function cleanupOldRateLimitRecords(): Promise<void> {
   try {
     await db
       .delete(rateLimitTracker)
-      .where(gte(cutoffTime, rateLimitTracker.windowStart));
+      .where(lt(rateLimitTracker.windowStart, cutoffTime));
   } catch (error) {
     console.error('Failed to cleanup old rate limit records:', error);
   }
@@ -165,7 +163,7 @@ export async function cleanupOldRateLimitRecords(): Promise<void> {
 /**
  * Hono middleware for rate limiting
  */
-export async function rateLimitMiddleware(c: Context<any, any, Variables>, next: Next) {
+export async function rateLimitMiddleware(c: any, next: Next) {
   const ipAddress = getClientIP(c);
   const rateLimitInfo = await checkRateLimit(ipAddress);
   

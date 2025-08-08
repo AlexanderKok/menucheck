@@ -37,10 +37,10 @@ export interface ParseResult {
   success: boolean;
   menuItems: ParsedMenuItem[];
   categories: string[];
-  parseMethod: string;
+  parseMethod: ParseStrategy;
   confidence: number;
   errorMessage?: string;
-  documentType?: string;
+  documentType?: DocumentType | string;
 }
 
 export interface ParseJob {
@@ -59,6 +59,26 @@ export interface ParseJob {
 export type ParseStrategy = 'html' | 'pdf_digital' | 'pdf_ocr' | 'javascript';
 export type DocumentType = 'digital_pdf' | 'scanned_pdf' | 'html_static' | 'html_dynamic';
 export type SourceType = 'pdf' | 'html' | 'js';
+
+// Queues and runs for unified pipeline (Phase 3)
+export interface UnifiedParseJob {
+  id: string;
+  documentId: string;
+  runId: string;
+  inputType: 'url' | 'file';
+  inputSource: string; // URL or file path
+  parserVersion: string;
+  createdAt: Date;
+  userId?: string;
+  restaurantId?: string;
+}
+
+export interface AnalysisJob {
+  id: string;
+  parseRunId: string;
+  analysisVersion: string;
+  createdAt: Date;
+}
 
 export interface ParsedMenuData {
   items: ParsedMenuItem[];

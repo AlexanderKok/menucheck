@@ -6,7 +6,9 @@
     "dev": "tsx watch src/server.ts",
     "deploy": "npm run deploy:cf",
     "deploy:cf": "node scripts/deploy-cloudflare.js",
-    "test": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ci": "vitest run --reporter=dot",
     "db:generate": "drizzle-kit generate:pg",
     "db:push": "drizzle-kit push:pg"
   },

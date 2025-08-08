@@ -65,38 +65,6 @@ export class UrlParser {
           const { parseHtmlMenu } = await import('./parsers/htmlParser');
           return await parseHtmlMenu(url);
           
-        case 'pdf_digital':
-          try {
-            const { parseDigitalPdf } = await import('./parsers/pdfParser');
-            return await parseDigitalPdf(url);
-          } catch (importError) {
-            console.warn('PDF parser not implemented, falling back to error response');
-            return {
-              success: false,
-              menuItems: [],
-              categories: [],
-              parseMethod: strategy,
-              confidence: 0,
-              errorMessage: 'PDF parsing not yet implemented'
-            };
-          }
-          
-        case 'pdf_ocr':
-          try {
-            const { parseScannedPdf } = await import('./parsers/pdfParser');
-            return await parseScannedPdf(url);
-          } catch (importError) {
-            console.warn('PDF OCR parser not implemented, falling back to error response');
-            return {
-              success: false,
-              menuItems: [],
-              categories: [],
-              parseMethod: strategy,
-              confidence: 0,
-              errorMessage: 'PDF OCR parsing not yet implemented'
-            };
-          }
-          
         case 'javascript':
           try {
             const { parseJavaScriptMenu } = await import('./parsers/jsParser');
@@ -114,7 +82,8 @@ export class UrlParser {
           }
           
         default:
-          throw new Error(`Unsupported parsing strategy: ${strategy}`);
+          // PDF strategies are not handled here; they are handled in the V2 pipeline directly
+          throw new Error(`Unsupported parsing strategy for UrlParser.parseUrl: ${strategy}`);
       }
     } catch (error) {
       console.error(`Error parsing URL with strategy ${strategy}:`, error);

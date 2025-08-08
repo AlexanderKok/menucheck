@@ -13,10 +13,12 @@ import * as publicUploadSchema from './schema/publicUploads';
 import { eq, desc } from 'drizzle-orm';
 import type { UrlUploadData, PublicUploadData, PublicRestaurantData } from './types/url-parsing';
 import { triageDocument } from './services/documentTriage';
-import { parseQueue } from './services/parseQueue';
+// Deprecated: legacy parseQueue (V1) is no longer used by URL routes
+// import { parseQueue } from './services/parseQueue';
 import { parseQueueV2 } from './services/parseQueueV2';
 import { analysisQueue } from './services/analysisQueue';
 import { transitionDocumentStatus } from './services/stateMachine';
+import { documents, parseRuns, analysisRuns } from './schema/documents';
 import { rateLimitMiddleware } from './middleware/rateLimit';
 
 type Env = {
@@ -294,11 +296,13 @@ publicRoutes.post('/parse-url', async (c) => {
     
     await db.insert(restaurantSchema.restaurantMenuSources).values(sourceData);
     
-    // Enqueue parsing job (legacy URL pipeline)
-    const jobId = await parseQueue.enqueueParseJob(sourceId, true); // true for public upload
-
-    // Also create a document via triage for unified pipeline tracking
+    // Create a document via triage for unified pipeline tracking
     const triage = await triageDocument({ type: 'url', source: body.url });
+    // Enqueue unified parse job (V2) and set status queued
+    try {
+      await transitionDocumentStatus(triage.documentId, 'queued');
+    } catch {}
+    const v2JobId = parseQueueV2.enqueueParseJob(triage.documentId, 'v1');
     
     return c.json({
       success: true,
@@ -308,7 +312,7 @@ publicRoutes.post('/parse-url', async (c) => {
       documentId: triage.documentId,
       documentType: triage.documentType,
       processingStrategy: triage.processingStrategy,
-      jobId,
+      parseJobId: v2JobId,
       message: 'URL parsing started. Please provide restaurant details to receive your analysis.',
       nextStep: `/restaurant-details/${publicUploadId}`
     });
@@ -897,16 +901,23 @@ protectedRoutes.post('/menus/parse-url', async (c) => {
     
     await db.insert(restaurantSchema.restaurantMenuSources).values(sourceData);
     
-    // Enqueue parsing job
-    const jobId = await parseQueue.enqueueParseJob(sourceId);
-    
+    // Unified pipeline: triage URL into documents and enqueue V2 parse job
+    const triage = await triageDocument({ type: 'url', source: body.url, userId: user.id });
+    try {
+      await transitionDocumentStatus(triage.documentId, 'queued');
+    } catch {}
+    const parseJobId = parseQueueV2.enqueueParseJob(triage.documentId, 'v1');
+
     return c.json({
       success: true,
       menuId: menuResult[0].id,
       restaurantId,
       sourceId,
-      jobId,
-      message: 'URL parsing job queued successfully',
+      documentId: triage.documentId,
+      documentType: triage.documentType,
+      processingStrategy: triage.processingStrategy,
+      parseJobId,
+      message: 'URL parsing started successfully',
     });
   } catch (error) {
     console.error('URL parsing error:', error);
@@ -920,6 +931,75 @@ protectedRoutes.post('/menus/parse-url', async (c) => {
 
 // Mount the protected routes under /protected
 api.route('/protected', protectedRoutes);
+
+// Document status endpoint for polling
+api.get('/documents/:documentId/status', async (c) => {
+  try {
+    const db = await getDatabase();
+    const documentId = c.req.param('documentId');
+    const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
+    if (!doc) {
+      return c.json({ error: 'Document not found' }, 404);
+    }
+  // Latest parse run
+  const latestParseRun = (await db.select().from(parseRuns)
+    .where(eq(parseRuns.documentId, documentId))
+    .orderBy(desc(parseRuns.startedAt))
+    .limit(1))[0] as any;
+  // Latest analysis run across all runs for this document
+  let latestAnalysisRun: any = undefined;
+  const allParseRuns = await db.select().from(parseRuns)
+    .where(eq(parseRuns.documentId, documentId))
+    .orderBy(desc(parseRuns.startedAt));
+  if (allParseRuns.length) {
+    // Fetch latest analysis among all parse runs
+    const analyses: any[] = [];
+    for (const pr of allParseRuns as any[]) {
+      const ar = (await db.select().from(analysisRuns)
+        .where(eq(analysisRuns.parseRunId, pr.id))
+        .orderBy(desc(analysisRuns.startedAt))
+        .limit(1))[0] as any;
+      if (ar) analyses.push(ar);
+    }
+    analyses.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+    latestAnalysisRun = analyses[0];
+  }
+
+    // Sanitize and shape response
+    const docResp = {
+      id: (doc as any).id,
+      status: (doc as any).status,
+      statusReason: (doc as any).statusReason,
+      documentType: (doc as any).documentType,
+      sourceType: (doc as any).sourceType,
+      createdAt: (doc as any).createdAt,
+      updatedAt: (doc as any).updatedAt,
+    };
+    const parseResp = latestParseRun ? {
+      id: latestParseRun.id,
+      status: latestParseRun.status,
+      parseMethod: latestParseRun.parseMethod,
+      confidence: latestParseRun.confidence,
+      errorMessage: latestParseRun.errorMessage,
+      startedAt: latestParseRun.startedAt,
+      completedAt: latestParseRun.completedAt,
+    } : null;
+    const analysisResp = latestAnalysisRun ? {
+      id: latestAnalysisRun.id,
+      status: latestAnalysisRun.status,
+      analysisVersion: latestAnalysisRun.analysisVersion,
+      metrics: latestAnalysisRun.metrics,
+      errorMessage: latestAnalysisRun.errorMessage,
+      startedAt: latestAnalysisRun.startedAt,
+      completedAt: latestAnalysisRun.completedAt,
+    } : null;
+
+    return c.json({ document: docResp, parseRun: parseResp, analysisRun: analysisResp });
+  } catch (error) {
+    console.error('Status endpoint error:', error);
+    return c.json({ error: 'Failed to fetch status' }, 500);
+  }
+});
 
 // Mount the API router
 app.route('/api/v1', api);

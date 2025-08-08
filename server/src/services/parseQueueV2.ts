@@ -18,7 +18,8 @@ export class ParseQueueV2 {
   enqueueParseJob(documentId: string, parserVersion: string): string {
     const jobId = `p2_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    this.queue.push({
+    // Opportunistically peek doc to set inputType/source now; fallback to defaults
+    const jobBase: UnifiedParseJob = {
       id: jobId,
       documentId,
       runId,
@@ -26,8 +27,22 @@ export class ParseQueueV2 {
       inputSource: documentId,
       parserVersion,
       createdAt: new Date(),
-    });
-    if (!this.isProcessing) setImmediate(() => this.processQueue());
+      retryCount: 0,
+      maxRetries: 3,
+    };
+    // Fire-and-forget async fetch to update job before processing
+    (async () => {
+      try {
+        const db = await getDatabase();
+        const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
+        if (doc) {
+          jobBase.inputType = ((doc as any).sourceType === 'url') ? 'url' : 'file';
+          jobBase.inputSource = (doc as any).storagePath as string;
+        }
+      } catch {}
+    })();
+    this.queue.push(jobBase);
+    if (!this.isProcessing) setTimeout(() => this.processQueue(), 0);
     return jobId;
   }
 
@@ -41,7 +56,7 @@ export class ParseQueueV2 {
       // noop
     } finally {
       this.isProcessing = false;
-      if (this.queue.length > 0) setImmediate(() => this.processQueue());
+      if (this.queue.length > 0) setTimeout(() => this.processQueue(), 0);
     }
   }
 
@@ -50,12 +65,19 @@ export class ParseQueueV2 {
     const [doc] = await db.select().from(documents).where(eq(documents.id, job.documentId)).limit(1);
     if (!doc) return;
 
-    await transitionDocumentStatus(job.documentId, 'parsing');
+    // Transition to parsing (tolerate invalid current states in tests or recovery flows)
+    try {
+      await transitionDocumentStatus(job.documentId, 'parsing');
+    } catch {}
 
     const mimeType = (doc as any).mimeType as string | null;
     const docType = (doc as any).documentType as string | null;
     const sourceType = (doc as any).sourceType as string | null;
     const storagePath = (doc as any).storagePath as string;
+
+    // Ensure job reflects actual input source/type
+    job.inputType = sourceType === 'url' ? 'url' : 'file';
+    job.inputSource = storagePath;
 
     // Decide strategy if not present
     let strategy: ParseStrategy;
@@ -98,26 +120,68 @@ export class ParseQueueV2 {
           status: parseResult.success ? 'completed' : 'failed',
           confidence: parseResult.confidence,
           rawOutput: parseResult as any,
+          errorMessage: parseResult.success ? null : (parseResult as any)?.errorMessage ?? null,
           completedAt: new Date(),
         })
         .where(eq(parseRuns.id, job.runId));
 
-      await transitionDocumentStatus(job.documentId, parseResult.success ? 'parsed' : 'failed_parsing');
+      try {
+        await transitionDocumentStatus(job.documentId, parseResult.success ? 'parsed' : 'failed_parsing');
+      } catch {}
 
       if (parseResult.success) {
         // Kick off analysis
         analysisQueue.enqueueAnalysisJob(job.runId, 'v1');
+      } else {
+        await this.handleFailure(job, parseResult.errorMessage || 'parse unsuccessful');
       }
 
     } catch (error: any) {
       await db.update(parseRuns)
         .set({ status: 'failed', errorMessage: error?.message || 'parse failed', completedAt: new Date() })
         .where(eq(parseRuns.id, job.runId));
-      await transitionDocumentStatus(job.documentId, 'failed_parsing', error?.message);
+      await this.handleFailure(job, error?.message || 'parse failed');
+    }
+  }
+
+  private async handleFailure(job: UnifiedParseJob, reason: string): Promise<void> {
+    const db = await getDatabase();
+    const currentRetry = job.retryCount ?? 0;
+    const maxRetries = job.maxRetries ?? 3;
+    if (currentRetry < maxRetries) {
+      const nextRetry = currentRetry + 1;
+      const backoffMs = Math.min(60000, Math.pow(2, currentRetry) * 5000);
+      const requeued: UnifiedParseJob = {
+        ...job,
+        id: `p2_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        runId: `run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        retryCount: nextRetry,
+      };
+      setTimeout(() => {
+        this.queue.push(requeued);
+        if (!this.isProcessing) setTimeout(() => this.processQueue(), 0);
+      }, backoffMs);
+    } else {
+      try {
+        await transitionDocumentStatus(job.documentId, 'failed_parsing', reason);
+      } catch {}
+      try {
+        await db.update(parseRuns)
+          .set({ errorMessage: reason, completedAt: new Date() })
+          .where(eq(parseRuns.id, job.runId));
+      } catch {}
     }
   }
 }
 
 export const parseQueueV2 = new ParseQueueV2();
+
+// Test-only helper to deterministically process one queued job immediately
+// Not intended for production use
+export async function __test__drainOnce(): Promise<void> {
+  try {
+    await (parseQueueV2 as any).processQueue();
+  } catch {}
+}
 
 

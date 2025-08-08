@@ -71,6 +71,9 @@ export interface UnifiedParseJob {
   createdAt: Date;
   userId?: string;
   restaurantId?: string;
+  // Retry controls (in-memory only)
+  retryCount?: number;
+  maxRetries?: number;
 }
 
 export interface AnalysisJob {
@@ -78,6 +81,9 @@ export interface AnalysisJob {
   parseRunId: string;
   analysisVersion: string;
   createdAt: Date;
+  // Retry controls (in-memory only)
+  retryCount?: number;
+  maxRetries?: number;
 }
 
 export interface ParsedMenuData {

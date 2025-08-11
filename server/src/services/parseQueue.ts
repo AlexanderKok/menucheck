@@ -1,3 +1,9 @@
+/**
+ * DEPRECATED: Legacy URL ParseQueue (v1)
+ * This queue is retained temporarily for reference and will be removed once
+ * all dependent scripts/tests are migrated to the unified V2 pipeline.
+ * Do not use in new code. Routes use ParseQueueV2 exclusively.
+ */
 import { getDatabase } from '../lib/db';
 import * as restaurantSchema from '../schema/restaurants';
 import * as menuSchema from '../schema/menus';

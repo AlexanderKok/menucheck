@@ -66,7 +66,13 @@ export async function parseDigitalPdf(_: string, fileContentBase64?: string): Pr
     const xPositions: number[] = [];
     for (const arr of bands.values()) {
       const xs = arr.map((t) => t.x).sort((a, b) => a - b);
-      if (xs.length) xPositions.push(xs[0]);
+      if (xs.length) {
+        xPositions.push(xs[0]);
+        const last = xs[xs.length - 1];
+        if (last - xs[0] > 80) {
+          xPositions.push(last);
+        }
+      }
     }
     if (xPositions.length > 4) {
       const sortedX = [...new Set(xPositions.map((v) => Math.round(v)))].sort((a, b) => a - b);
@@ -75,11 +81,12 @@ export async function parseDigitalPdf(_: string, fileContentBase64?: string): Pr
       const mean = gaps.reduce((a, b) => a + b, 0) / Math.max(1, gaps.length);
       const variance = gaps.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / Math.max(1, gaps.length);
       const std = Math.sqrt(variance);
-      const threshold = Math.max(40, mean + std); // 40–60px typical threshold; adaptive using mean+std
+      // Threshold with minimum gap and adaptive component
+      const threshold = Math.max(50, mean + std); // increase min-gap to reduce false splits
       // Split columns by large gaps
       const cuts: number[] = [];
       for (let i = 1; i < sortedX.length; i++) {
-        if (sortedX[i] - sortedX[i - 1] > threshold) cuts.push(i);
+        if (sortedX[i] - sortedX[i - 1] >= threshold) cuts.push(i);
       }
       if (cuts.length > 0) {
         columnCount = cuts.length + 1;
@@ -118,7 +125,7 @@ export async function parseDigitalPdf(_: string, fileContentBase64?: string): Pr
       // y-gap heuristic: if next line is far in y (band index jumps), treat as heading
       const bandIdx = bandIndexByLine[i] ?? 0;
       const nextBandIdx = bandIndexByLine[i + 1] ?? bandIdx;
-      const bigGap = nextBandIdx - bandIdx >= 2; // larger gap means spacing separator
+      const bigGap = nextBandIdx - bandIdx >= 3; // stricter band-jump heuristic
       const isHeading = isHeadingText || (bigGap && !PRICE_REGEX.test(line));
       if (isHeading) {
         currentCategory = line;

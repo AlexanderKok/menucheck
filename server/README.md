@@ -1,26 +1,43 @@
-# Chat App API
+# KaartKompas API
 
-This is the API server for the Chat App, built with Cloudflare Workers.
+Hono-based API server for KaartKompas. Supports local Node.js dev and Cloudflare Workers deployment.
 
 ## Environment Setup
 
-The API uses `.dev.vars` for local development configuration and Cloudflare's dashboard for production environment variables. Follow these steps to get started:
+The API can run either locally (Node.js) or on Cloudflare Workers. Use the following files/locations for environment variables:
+
+- Local Node.js dev: `server/.env` (dotenv is loaded by `src/api.ts` via `dotenv/config`)
+- Cloudflare Workers dev/prod: `server/wrangler.toml` and Cloudflare Dashboard → Workers & Pages → Settings → Variables
+- CI (optional): set env vars in your CI provider secrets
 
 1. Create your local development variables file:
    ```bash
-   # Copy the example vars file
-   cp .dev.vars.example .dev.vars
+   # Create .env for Node.js local dev
+   cd server
+   cp .env.example .env
    ```
 
-2. Configure your environment variables in `.dev.vars`:
-   ```
-   DATABASE_URL=postgresql://user:password@your-db-host/your-db-name
+2. Configure your environment variables in `server/.env`:
+   ```env
+   # Database (local dev can omit to use embedded or scripts)
+   DATABASE_URL=postgresql://postgres:password@localhost:5502/postgres
+
+   # Google reCAPTCHA (required for public routes). For local dev you can use dev-token from UI
+   RECAPTCHA_SECRET_KEY=your-recaptcha-secret
+
+   # Firebase project used by backend to verify tokens
    FIREBASE_PROJECT_ID=your-firebase-project-id
+
+   # Optional runtime hint for code paths
+   RUNTIME=node
    ```
 
-3. Update the worker name in `wrangler.toml`:
+3. For Cloudflare Workers, set variables via `wrangler.toml` (for dev) and Dashboard (for prod). Example snippet:
    ```toml
-   name = "your-worker-name"    # This is your Cloudflare Worker name
+   name = "kaartkompas-api"
+   [vars]
+   FIREBASE_PROJECT_ID = "your-firebase-project-id"
+   # never commit secrets here; set RECAPTCHA_SECRET_KEY and DATABASE_URL in Dashboard secrets
    ```
 
 ## Firebase Setup
@@ -32,23 +49,25 @@ The API uses Firebase Authentication. To set up Firebase:
 3. Copy your project ID from the project settings
 4. Add it to your environment variables as `FIREBASE_PROJECT_ID`
 
+Frontend config: place your web app config in `ui/src/lib/firebase-config.json` (or `ui/src/lib/firebase-config.template.json` → copy to `firebase-config.json`).
+
 The API uses Firebase's public JWKS endpoint to verify tokens, so no additional credentials are needed.
 
-## Development Server Configuration
+## Development Server
 
-The development server configuration is set in `wrangler.toml`. By default, it runs on port 8787. To use a different port:
+Local Node.js dev:
 
-1. **Option 1**: Modify `wrangler.toml` directly
-   ```toml
-   [dev]
-   port = YOUR_PREFERRED_PORT  # Replace with your desired port number
-   local_protocol = "http"
-   ```
+```bash
+cd server
+pnpm dev
+```
 
-2. **Option 2**: Use the CLI flag (temporary override)
-   ```bash
-   pnpm wrangler dev --port YOUR_PREFERRED_PORT
-   ```
+Cloudflare Workers dev:
+
+```bash
+cd server
+pnpm wrangler dev
+```
 
 ## Development
 
@@ -58,17 +77,22 @@ pnpm wrangler dev
 ```
 
 This will:
-- Load variables from `.dev.vars`
-- Start the development server (default port: 8787)
-- Enable local development tools
+- Load variables from `.env` (Node) or Wrangler (`[vars]`) / Dashboard (Workers)
+- Start the server (default worker dev port: 8787)
 
 Your API will be available at `http://localhost:8787` (or your configured port).
 
-## Build Process
+## OCR/PDF Utilities (parsing)
 
-**No build step required!** Cloudflare Workers automatically handle the build process during both development (`wrangler dev`) and deployment (`wrangler deploy`). The TypeScript files in `src/` are processed directly by Wrangler.
+Some parsing paths use external tools (only needed for OCR/triage and not used in pure digital PDF path):
 
-This is different from traditional Node.js applications that require a separate build step to compile TypeScript to JavaScript.
+- poppler-utils: `pdftoppm`, `pdfinfo`
+- tesseract OCR: `tesseract`
+
+Install:
+
+- macOS: `brew install poppler tesseract`
+- Ubuntu/Debian: `apt-get update && apt-get install -y poppler-utils tesseract-ocr`
 
 ## API Authentication
 
@@ -94,20 +118,17 @@ This will deploy to your Cloudflare Workers environment using the name specified
 - DATABASE_URL
 - FIREBASE_PROJECT_ID
 
-## Environment Variables
+## Environment Variables Reference
 
-### Local Development
-- `.dev.vars`: Contains your development environment variables
-- `.dev.vars.example`: Template file showing required variables (safe to commit)
+Set these in `server/.env` for local Node dev, and in Cloudflare Dashboard for Workers prod. Defaults shown where applicable.
 
-### Production
-Configure your production environment variables in the Cloudflare Dashboard:
-1. Go to Workers & Pages
-2. Select your application (it will be listed under the name specified in `wrangler.toml`)
-3. Navigate to Settings > Environment Variables
-4. Add your environment variables with production values
+- DATABASE_URL: Postgres connection string. Example local: `postgresql://postgres:password@localhost:5502/postgres`. For Neon/Supabase, copy from provider.
+- RECAPTCHA_SECRET_KEY: Secret from Google reCAPTCHA v2/Enterprise; required for public routes. For local UI you can pass `dev-token` to bypass, but backend still checks env.
+- FIREBASE_PROJECT_ID: Your Firebase project ID (from Firebase Console → Project Settings → General).
+- RUNTIME: Optional hint set to `node` in local Node.js; Workers will set env via bindings.
 
-⚠️ Important: Never commit your `.dev.vars` file to version control. It should be listed in `.gitignore`.
+Optional (emulators/local tools):
+- FIREBASE_AUTH_EMULATOR_HOST: Set by dev scripts for local emulator; backend automatically treats as development if present.
 
 ## Troubleshooting
 
@@ -130,9 +151,11 @@ This project uses [Drizzle ORM](https://orm.drizzle.team) with a Neon Postgres d
 
 ### Setting Up Your Database
 
-1. Get your database connection string from Neon:
+1. Get your database connection string from Neon/Supabase or run embedded/local Postgres:
    ```
+   # Neon example
    DATABASE_URL=postgres://user:password@your-neon-host/dbname
+   # or local embedded defaults to a dynamic port via scripts; see logs or use 5502 during dev
    ```
 
 2. Add it to your `.dev.vars`:
@@ -142,7 +165,7 @@ This project uses [Drizzle ORM](https://orm.drizzle.team) with a Neon Postgres d
 
 3. Push the schema to your database:
    ```bash
-   npx dotenv-cli -e .dev.vars -- pnpm db:push
+   pnpm dlx dotenv-cli -e .env -- pnpm db:push
    ```
 
-This command will create or update your database tables to match your schema. Run it whenever you make changes to files in `src/schema/`. 
+This command will create or update your database tables to match your schema. Run it whenever you make changes to files in `src/schema/`.

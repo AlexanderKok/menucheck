@@ -28,8 +28,8 @@ export const restaurants = appSchema.table('restaurants', {
 
 export const restaurantMenuSources = appSchema.table('restaurant_menu_sources', {
   id: text('id').primaryKey(),
-  restaurantId: text('restaurant_id').notNull().references(() => restaurants.id, { onDelete: 'cascade' }),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  restaurantId: text('restaurant_id').references(() => restaurants.id, { onDelete: 'cascade' }),
+  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
   
   // Source information
   url: text('url').notNull(),

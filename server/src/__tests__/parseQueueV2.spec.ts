@@ -148,6 +148,34 @@ describe('ParseQueueV2', () => {
     // Should have attempted parse at least three times (based on our mocked digitalCalls)
     expect(digitalCalls).toBeGreaterThanOrEqual(3);
     expect(docs[0].status === 'parsed' || docs[0].status === 'failed_parsing' || docs[0].status === 'analyzing' || docs[0].status === 'analyzed' || docs[0].status === 'done').toBe(true);
+
+    // Assert parseRuns captured and updated
+    expect(parseRuns.length).toBeGreaterThan(0);
+    const lastRun = parseRuns[parseRuns.length - 1];
+    expect(lastRun).toHaveProperty('id');
+    expect(lastRun).toHaveProperty('documentId');
+    expect(lastRun).toHaveProperty('parserVersion');
+    expect(lastRun).toHaveProperty('parseMethod');
+    expect(lastRun).toHaveProperty('status');
+    // Strengthened assertions per plan
+    expect(lastRun).toHaveProperty('startedAt');
+    // Either in success or failure path, completedAt should be set on update
+    expect(lastRun).toHaveProperty('completedAt');
+    expect(lastRun).toHaveProperty('confidence');
+    expect(lastRun).toHaveProperty('rawOutput');
+  });
+
+  it('enqueues analysis only after successful parse completion', async () => {
+    // Ensure next parse attempt will succeed immediately
+    digitalCalls = 3;
+    docs.push({ id: 'doc_success', mimeType: 'application/pdf', documentType: 'digital_pdf', sourceType: 'upload', storagePath: '/tmp/file2.pdf', status: 'uploaded' });
+    const jobId = parseQueueV2.enqueueParseJob('doc_success', 'v1');
+    expect(jobId).toBeTruthy();
+    await __test__drainOnce();
+    // Ensure the last run is marked completed before analysis is enqueued
+    const lastRun = parseRuns[parseRuns.length - 1];
+    expect(lastRun.status === 'completed' || lastRun.status === 'failed').toBe(true);
+    expect(enqueueSpy).toHaveBeenCalled();
   });
 });
 

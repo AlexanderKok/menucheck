@@ -4,7 +4,7 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { authMiddleware } from './middleware/auth';
 import { getDatabase, testDatabaseConnection } from './lib/db';
-import { setEnvContext, clearEnvContext, getDatabaseUrl } from './lib/env';
+import { setEnvContext, clearEnvContext, getDatabaseUrl, getEnv } from './lib/env';
 import * as schema from './schema/users';
 import * as menuSchema from './schema/menus';
 import * as restaurantSchema from './schema/restaurants';
@@ -13,8 +13,6 @@ import * as publicUploadSchema from './schema/publicUploads';
 import { eq, desc } from 'drizzle-orm';
 import type { UrlUploadData, PublicUploadData, PublicRestaurantData } from './types/url-parsing';
 import { triageDocument } from './services/documentTriage';
-// Deprecated: legacy parseQueue (V1) is no longer used by URL routes
-// import { parseQueue } from './services/parseQueue';
 import { parseQueueV2 } from './services/parseQueueV2';
 import { analysisQueue } from './services/analysisQueue';
 import { transitionDocumentStatus } from './services/stateMachine';
@@ -57,7 +55,7 @@ app.get('/', (c) => c.json({ status: 'ok', message: 'API is running' }));
 
 // Helper function to verify reCAPTCHA token
 async function verifyRecaptcha(token: string, clientIP?: string): Promise<boolean> {
-  const secretKey = process.env.RECAPTCHA_SECRET_KEY;
+  const secretKey = getEnv('RECAPTCHA_SECRET_KEY');
   
   // In development mode, allow dev tokens to pass
   if (token === 'dev-token') {
@@ -281,8 +279,8 @@ publicRoutes.post('/parse-url', async (c) => {
     const sourceId = `source_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const sourceData = {
       id: sourceId,
-      restaurantId: '', // Empty for public uploads
-      userId: '', // Empty for public uploads
+      restaurantId: null as string | null, // Public uploads have no restaurant yet
+      userId: null as string | null, // Public uploads have no user
       url: body.url,
       sourceType: 'html' as const,
       documentType: null,
@@ -298,6 +296,16 @@ publicRoutes.post('/parse-url', async (c) => {
     
     // Create a document via triage for unified pipeline tracking
     const triage = await triageDocument({ type: 'url', source: body.url });
+    // Update the source row with triage-derived info
+    const mappedSourceType = triage.documentType.includes('pdf') ? 'pdf' : (triage.processingStrategy === 'javascript' ? 'js' : 'html');
+    await db.update(restaurantSchema.restaurantMenuSources)
+      .set({
+        sourceType: mappedSourceType,
+        documentType: triage.documentType,
+        parseMethod: triage.processingStrategy,
+        updatedAt: new Date(),
+      })
+      .where(eq(restaurantSchema.restaurantMenuSources.id, sourceId));
     // Enqueue unified parse job (V2) and set status queued
     try {
       await transitionDocumentStatus(triage.documentId, 'queued');
@@ -886,7 +894,7 @@ protectedRoutes.post('/menus/parse-url', async (c) => {
     const sourceId = `source_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const sourceData = {
       id: sourceId,
-      restaurantId: restaurantId || '',
+      restaurantId: restaurantId || null,
       userId: user.id,
       url: body.url,
       sourceType: 'html' as const, // Default to HTML, parser will update
@@ -903,6 +911,16 @@ protectedRoutes.post('/menus/parse-url', async (c) => {
     
     // Unified pipeline: triage URL into documents and enqueue V2 parse job
     const triage = await triageDocument({ type: 'url', source: body.url, userId: user.id });
+    // Update the source row with triage-derived info
+    const mappedSourceType = triage.documentType.includes('pdf') ? 'pdf' : (triage.processingStrategy === 'javascript' ? 'js' : 'html');
+    await db.update(restaurantSchema.restaurantMenuSources)
+      .set({
+        sourceType: mappedSourceType,
+        documentType: triage.documentType,
+        parseMethod: triage.processingStrategy,
+        updatedAt: new Date(),
+      })
+      .where(eq(restaurantSchema.restaurantMenuSources.id, sourceId));
     try {
       await transitionDocumentStatus(triage.documentId, 'queued');
     } catch {}

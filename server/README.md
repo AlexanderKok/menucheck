@@ -127,6 +127,24 @@ Set these in `server/.env` for local Node dev, and in Cloudflare Dashboard for W
 - FIREBASE_PROJECT_ID: Your Firebase project ID (from Firebase Console → Project Settings → General).
 - RUNTIME: Optional hint set to `node` in local Node.js; Workers will set env via bindings.
 
+### Competitive Pipeline
+
+Add these variables to `.env` (server) to enable Feature 0009:
+
+- OSM_USER_AGENT: e.g., `kaartkompas/youremail@example.com` (required for Nominatim/Overpass)
+- GOOGLE_CSE_ID and GOOGLE_API_KEY (optional, for Google Custom Search), or SERPAPI_KEY (optional)
+- HTTP_DEFAULT_TIMEOUT_MS: e.g., `15000`
+- COMPETITIVE_MAX_CONCURRENCY: e.g., `5`
+- ADMIN_MODE: set to `true` to allow admin routes locally
+
+Admin endpoints (require auth + `ADMIN_MODE=true`):
+- POST `/api/v1/admin/competitive/ingest` body `{ location: string }`
+- GET `/api/v1/admin/competitive/runs/:runId`
+- GET `/api/v1/admin/competitive/export?runId=...` (CSV)
+
+CLI script:
+- `pnpm tsx src/scripts/ingest-osm-the-hague.ts`
+
 Optional (emulators/local tools):
 - FIREBASE_AUTH_EMULATOR_HOST: Set by dev scripts for local emulator; backend automatically treats as development if present.
 

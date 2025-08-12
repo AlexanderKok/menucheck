@@ -18,6 +18,8 @@ import { analysisQueue } from './services/analysisQueue';
 import { transitionDocumentStatus } from './services/stateMachine';
 import { documents, parseRuns, analysisRuns } from './schema/documents';
 import { rateLimitMiddleware } from './middleware/rateLimit';
+import { runCompetitiveIngest } from './services/competitive/pipeline';
+import { extCrawlRuns, extRestaurants } from './schema/competitive';
 
 type Env = {
   RUNTIME?: string;
@@ -949,6 +951,69 @@ protectedRoutes.post('/menus/parse-url', async (c) => {
 
 // Mount the protected routes under /protected
 api.route('/protected', protectedRoutes);
+
+// Admin-only competitive routes (reuse auth and require admin via env flag for now)
+const adminRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
+adminRoutes.use('*', authMiddleware);
+
+function isAdmin() {
+  // Simple env-based guard for now; can be extended to roles table
+  return process.env.ADMIN_MODE === 'true';
+}
+
+adminRoutes.post('/competitive/ingest', async (c) => {
+  if (!isAdmin()) return c.json({ error: 'Forbidden' }, 403);
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const location = body.location || 'The Hague';
+    const runId = await runCompetitiveIngest({ location });
+    return c.json({ runId });
+  } catch (error) {
+    console.error('Ingest error:', error);
+    return c.json({ error: 'Failed to start ingest' }, 500);
+  }
+});
+
+adminRoutes.get('/competitive/runs/:runId', async (c) => {
+  if (!isAdmin()) return c.json({ error: 'Forbidden' }, 403);
+  const runId = c.req.param('runId');
+  const db = await getDatabase();
+  const [run] = await db.select().from(extCrawlRuns).where(eq(extCrawlRuns.id, runId as any)).limit(1);
+  if (!run) return c.json({ error: 'Not found' }, 404);
+  return c.json({ run });
+});
+
+adminRoutes.get('/competitive/export', async (c) => {
+  if (!isAdmin()) return c.json({ error: 'Forbidden' }, 403);
+  const runId = c.req.query('runId');
+  if (!runId) return c.json({ error: 'runId required' }, 400);
+  const db = await getDatabase();
+  const rows = await db.select().from(extRestaurants).where(eq(extRestaurants.runId, runId as any));
+  const header = [
+    'name','addr_street','addr_housenumber','addr_postcode','addr_city','addr_country','latitude','longitude',
+    'website_url','website_effective_url','website_http_status','website_is_valid','website_discovery_method',
+    'menu_url','menu_http_status','menu_is_valid','menu_discovery_method'
+  ];
+  const csv = [header.join(',')].concat(rows.map((r: any) => [
+    wrap(r.name), wrap(r.addrStreet), wrap(r.addrHousenumber), wrap(r.addrPostcode), wrap(r.addrCity), wrap(r.addrCountry), r.latitude ?? '', r.longitude ?? '',
+    wrap(r.websiteUrl), wrap(r.websiteEffectiveUrl), r.websiteHttpStatus ?? '', r.websiteIsValid ? 'true' : 'false', wrap(r.websiteDiscoveryMethod),
+    wrap(r.menuUrl), r.menuHttpStatus ?? '', r.menuIsValid ? 'true' : 'false', wrap(r.menuDiscoveryMethod)
+  ].join(',')) ).join('\n');
+  return c.newResponse(csv, 200, {
+    'Content-Type': 'text/csv; charset=utf-8',
+    'Content-Disposition': `attachment; filename="competitive_export_${runId}.csv"`,
+  });
+});
+
+function wrap(v: any): string {
+  if (v === null || v === undefined) return '';
+  const s = String(v);
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+// Mount admin routes
+api.route('/admin', adminRoutes);
 
 // Document status endpoint for polling
 api.get('/documents/:documentId/status', async (c) => {

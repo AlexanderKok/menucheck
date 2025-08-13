@@ -1,5 +1,5 @@
 import type { UrlCandidate, ValidationResult } from '../../types/competitive';
-import { getEnv } from '../../lib/env';
+import { getEnv, getHttpTimeoutMs } from '../../lib/env';
 
 const SOCIAL_HOSTS = [
   'facebook.com', 'm.facebook.com', 'instagram.com'
@@ -63,7 +63,7 @@ function hostOf(u: string): string {
 }
 
 export async function validateUrl(url: string): Promise<ValidationResult> {
-  const timeoutMs = Number(getEnv('HTTP_DEFAULT_TIMEOUT_MS') || '15000');
+  const timeoutMs = getHttpTimeoutMs();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const headers: Record<string, string> = { 'User-Agent': getEnv('OSM_USER_AGENT') || 'kaartkompas/unknown-contact' };

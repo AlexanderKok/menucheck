@@ -142,8 +142,17 @@ Admin endpoints (require auth + `ADMIN_MODE=true`):
 - GET `/api/v1/admin/competitive/runs/:runId`
 - GET `/api/v1/admin/competitive/export?runId=...` (CSV)
 
-CLI script:
+CLI scripts:
 - `pnpm tsx src/scripts/ingest-osm-the-hague.ts`
+- `pnpm tsx src/scripts/enrich-osm-websites.ts --run-id cr_... --limit=200 --methods=guess,duckduckgo --rate=0.2 --min-score=60`
+
+Fallback enrichment env (add to `.env` as needed):
+- `FALLBACK_SEARCH_RATE_RPS` (default `0.2`)
+- `FALLBACK_SEARCH_MAX_CANDIDATES` (default `5`)
+- `FALLBACK_VERIFY_MIN_SCORE` (default `60`)
+- `FALLBACK_TLDS` (default `.nl,.com,.eu,.be`)
+- `FALLBACK_ENABLE_GUESS` (default `true`)
+- `FALLBACK_ENABLE_DDG` (default `true`)
 
 Optional (emulators/local tools):
 - FIREBASE_AUTH_EMULATOR_HOST: Set by dev scripts for local emulator; backend automatically treats as development if present.

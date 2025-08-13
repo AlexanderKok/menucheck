@@ -40,7 +40,7 @@ export type ValidationResult = {
 
 export type MenuDiscoveryResult = {
   url?: string;
-  method?: 'link_text' | 'header' | 'sitemap' | 'search' | 'slug_guess';
+  method?: 'link_text' | 'header' | 'nav' | 'footer' | 'sitemap' | 'slug';
   httpStatus?: number;
   contentType?: string;
   isPdf?: boolean;

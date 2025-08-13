@@ -11,6 +11,51 @@ import type { PipelineOptions, PipelineStats } from '../../types/competitive';
 
 function delay(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
 
+// Simple per-host semaphore
+type QueueTask = () => Promise<void>;
+const hostQueues = new Map<string, { active: number; limit: number; queue: QueueTask[] }>();
+
+function getHost(url: string | URL): string {
+  try { return new URL(String(url)).host; } catch { return 'invalid'; }
+}
+
+async function withHostLimit<T>(url: string, limit: number, task: () => Promise<T>): Promise<T> {
+  const host = getHost(url);
+  let entry = hostQueues.get(host);
+  if (!entry) {
+    entry = { active: 0, limit, queue: [] };
+    hostQueues.set(host, entry);
+  }
+  if (entry.active < entry.limit) {
+    entry.active += 1;
+    try {
+      const result = await task();
+      return result;
+    } finally {
+      entry.active -= 1;
+      const next = entry.queue.shift();
+      if (next) next();
+    }
+  }
+  // Enqueue
+  return await new Promise<T>((resolve, reject) => {
+    const run = async () => {
+      entry!.active += 1;
+      try {
+        const result = await task();
+        resolve(result);
+      } catch (e) {
+        reject(e);
+      } finally {
+        entry!.active -= 1;
+        const next = entry!.queue.shift();
+        if (next) next();
+      }
+    };
+    entry!.queue.push(run);
+  });
+}
+
 export async function runCompetitiveIngest(options: PipelineOptions): Promise<string> {
   const db = await getDatabase();
   const runId = `cr_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
@@ -31,11 +76,12 @@ export async function runCompetitiveIngest(options: PipelineOptions): Promise<st
     // Per-run small budget for Google CSE fallbacks to avoid quota exhaustion
     const searchBudget = { remaining: Number(getEnv('GOOGLE_SEARCH_BUDGET') || '25') };
     let index = 0;
+    const perHostLimit = 5;
     async function worker() {
       while (index < places.length) {
         const i = index++;
         const p = places[i];
-        await processPlace(db, runId, p, stats, searchBudget);
+        await processPlace(db, runId, p, stats, searchBudget, perHostLimit);
         // polite delay between requests clusters
         await delay(100);
       }
@@ -50,7 +96,7 @@ export async function runCompetitiveIngest(options: PipelineOptions): Promise<st
   return runId;
 }
 
-async function processPlace(db: any, runId: string, p: any, stats: PipelineStats, searchBudget: { remaining: number }): Promise<void> {
+async function processPlace(db: any, runId: string, p: any, stats: PipelineStats, searchBudget: { remaining: number }, perHostLimit: number): Promise<void> {
   const id = `er_${runId}_${p.elementType}_${p.elementId}`;
   const baseRow = {
     id,
@@ -78,11 +124,11 @@ async function processPlace(db: any, runId: string, p: any, stats: PipelineStats
   // Pick website candidate from OSM
   const candidates = pickBestOsmWebsite(p.tags || {});
   let finalWebsite: string | null = null;
-  let websiteMethod: 'osm' | 'google' | undefined;
+  let websiteMethod: 'osm' | 'google' | 'reuse' | undefined;
   const hadOsmCandidate = candidates.length > 0;
   for (const cand of candidates) {
     if (!cand.url) continue;
-    const result = await validateUrl(cand.url);
+    const result = await withHostLimit(cand.url, perHostLimit, () => validateUrl(cand.url));
     await db.insert(extRestaurantChecks).values({
       id: `chk_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
       restaurantId: id,
@@ -132,7 +178,7 @@ async function processPlace(db: any, runId: string, p: any, stats: PipelineStats
   if (!finalWebsite) {
     const googleUrl = await searchOfficialSite(baseRow.name, baseRow.addrCity || '', searchBudget);
     if (googleUrl) {
-      const result = await validateUrl(googleUrl);
+      const result = await withHostLimit(googleUrl, perHostLimit, () => validateUrl(googleUrl));
       await db.insert(extRestaurantChecks).values({
         id: `chk_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
         restaurantId: id,
@@ -158,7 +204,7 @@ async function processPlace(db: any, runId: string, p: any, stats: PipelineStats
 
   let menuInfo: { url?: string; method?: string; httpStatus?: number; contentType?: string; isPdf?: boolean; isValid?: boolean } = {};
   if (finalWebsite) {
-    const res = await discoverMenuUrl(finalWebsite);
+    const res = await withHostLimit(finalWebsite, perHostLimit, () => discoverMenuUrl(finalWebsite));
     if (res.isValid && res.url) {
       stats.with_menu_url += 1;
       menuInfo = { url: res.url, method: res.method, httpStatus: res.httpStatus, contentType: res.contentType, isPdf: res.isPdf, isValid: res.isValid };

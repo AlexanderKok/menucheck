@@ -10,7 +10,9 @@
     "test:watch": "vitest",
     "test:ci": "vitest run --reporter=dot",
     "db:generate": "drizzle-kit generate:pg",
-    "db:push": "drizzle-kit push:pg"
+    "db:push": "drizzle-kit push:pg",
+    "enrich:csv": "tsx src/scripts/test-enrich-from-csv.ts",
+    "enrich:osm": "tsx src/scripts/enrich-osm-websites.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.12.0",
@@ -20,6 +22,7 @@
     "csv-parse": "^6.1.0",
     "dotenv": "^16.0.0",
     "drizzle-orm": "^0.30.1",
+    "fast-xml-parser": "^4.5.3",
     "firebase-admin": "^12.0.0",
     "fs-extra": "^11.2.0",
     "hono": "^4.0.5",

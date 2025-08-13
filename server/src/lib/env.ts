@@ -85,3 +85,14 @@ export function isCloudflareEnv(source: EnvLike): boolean {
   // In Cloudflare Workers, process.env is not available or is empty
   return typeof process === 'undefined' || Object.keys(process.env).length === 0;
 } 
+
+/**
+ * Safely read HTTP timeout env var and clamp to a sane range.
+ * Defaults to 15000ms; clamps to [1, 120000].
+ */
+export function getHttpTimeoutMs(): number {
+  const raw = getEnv('HTTP_DEFAULT_TIMEOUT_MS');
+  const num = raw !== undefined ? Number(raw) : 15000;
+  if (!Number.isFinite(num) || num <= 0) return 15000;
+  return Math.max(1, Math.min(120000, Math.floor(num)));
+}

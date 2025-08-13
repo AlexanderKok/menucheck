@@ -99,6 +99,11 @@ export async function uploadMenuUrl(urlData: {
   return response.json();
 }
 
+export async function getDocumentStatus(documentId: string) {
+  const response = await fetchWithAuth(`/api/v1/protected/documents/${documentId}/status`);
+  return response.json();
+}
+
 // Restaurant management endpoints
 export async function createRestaurant(restaurantData: {
   name: string;
@@ -272,6 +277,7 @@ export const api = {
   uploadMenuUrl,
   getUserMenus,
   getMenuAnalysis,
+  getDocumentStatus,
   createRestaurant,
   getRestaurants,
   getRestaurantMenus,

@@ -60,6 +60,9 @@ importers:
       drizzle-orm:
         specifier: ^0.30.1
         version: 0.30.10(@cloudflare/workers-types@4.20250525.0)(@electric-sql/pglite@0.3.2)(@neondatabase/serverless@0.9.5)(@opentelemetry/api@1.9.0)(@types/pg@8.15.2)(@types/react@19.1.5)(pg@8.16.0)(postgres@3.4.7)(react@19.1.0)
+      fast-xml-parser:
+        specifier: ^4.5.3
+        version: 4.5.3
       firebase-admin:
         specifier: ^12.0.0
         version: 12.7.0(encoding@0.1.13)
@@ -10085,7 +10088,6 @@ snapshots:
   fast-xml-parser@4.5.3:
     dependencies:
       strnum: 1.1.2
-    optional: true
 
   fastq@1.19.1:
     dependencies:
@@ -12233,8 +12235,7 @@ snapshots:
     dependencies:
       js-tokens: 9.0.1
 
-  strnum@1.1.2:
-    optional: true
+  strnum@1.1.2: {}
 
   stubs@3.0.0: {}
 

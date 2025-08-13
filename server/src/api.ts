@@ -193,6 +193,13 @@ publicRoutes.post('/upload-menu', async (c) => {
       await transitionDocumentStatus(triage.documentId, 'queued');
     } catch {}
     const parseJobId = parseQueueV2.enqueueParseJob(triage.documentId, 'v1');
+
+    // Link menu upload to document
+    try {
+      await db.update(menuSchema.menuUploads)
+        .set({ documentId: triage.documentId })
+        .where(eq(menuSchema.menuUploads.id, menuId));
+    } catch {}
     
     return c.json({
       success: true,
@@ -313,6 +320,13 @@ publicRoutes.post('/parse-url', async (c) => {
       await transitionDocumentStatus(triage.documentId, 'queued');
     } catch {}
     const v2JobId = parseQueueV2.enqueueParseJob(triage.documentId, 'v1');
+
+    // Link menu upload to document
+    try {
+      await db.update(menuSchema.menuUploads)
+        .set({ documentId: triage.documentId })
+        .where(eq(menuSchema.menuUploads.id, menuId));
+    } catch {}
     
     return c.json({
       success: true,
@@ -571,6 +585,13 @@ protectedRoutes.post('/upload-menu', async (c) => {
     } catch {}
     const parseJobId = parseQueueV2.enqueueParseJob(triage.documentId, 'v1');
 
+    // Link menu upload to document
+    try {
+      await db.update(menuSchema.menuUploads)
+        .set({ documentId: triage.documentId })
+        .where(eq(menuSchema.menuUploads.id, menuId));
+    } catch {}
+
     return c.json({
       success: true,
       menuId,
@@ -676,8 +697,38 @@ protectedRoutes.get('/menus', async (c) => {
       .from(menuSchema.menuUploads)
       .where(eq(menuSchema.menuUploads.userId, user.id))
       .orderBy(desc(menuSchema.menuUploads.createdAt));
+
+    // Optionally enrich with latest parse/analysis status if documentId is present
+    const enrichedMenus = [] as any[];
+    for (const menu of menus as any[]) {
+      let latestParseStatus: string | null = null;
+      let latestAnalysisStatus: string | null = null;
+      let lastUpdatedAt: Date | null = null;
+      if (menu.documentId) {
+        const latestParseRun = (await db.select().from(parseRuns)
+          .where(eq(parseRuns.documentId, menu.documentId))
+          .orderBy(desc(parseRuns.startedAt))
+          .limit(1))[0] as any;
+        if (latestParseRun) {
+          latestParseStatus = latestParseRun.status;
+          lastUpdatedAt = latestParseRun.completedAt || latestParseRun.startedAt || lastUpdatedAt;
+          const latestAnalysis = (await db.select().from(analysisRuns)
+            .where(eq(analysisRuns.parseRunId, latestParseRun.id))
+            .orderBy(desc(analysisRuns.startedAt))
+            .limit(1))[0] as any;
+          if (latestAnalysis) {
+            latestAnalysisStatus = latestAnalysis.status;
+            const analysisUpdated = latestAnalysis.completedAt || latestAnalysis.startedAt;
+            if (analysisUpdated && (!lastUpdatedAt || new Date(analysisUpdated) > new Date(lastUpdatedAt))) {
+              lastUpdatedAt = analysisUpdated;
+            }
+          }
+        }
+      }
+      enrichedMenus.push({ ...menu, latestParseStatus, latestAnalysisStatus, lastUpdatedAt, documentId: menu.documentId });
+    }
     // Strip large/raw file content from analysisData before returning
-    const sanitizedMenus = menus.map((menu: any) => {
+    const sanitizedMenus = enrichedMenus.map((menu: any) => {
       if (menu && menu.analysisData && typeof menu.analysisData === 'object') {
         const { fileContent, ...restAnalysis } = menu.analysisData as Record<string, any>;
         // Ensure raw bytes are removed if accidentally present
@@ -928,6 +979,13 @@ protectedRoutes.post('/menus/parse-url', async (c) => {
     } catch {}
     const parseJobId = parseQueueV2.enqueueParseJob(triage.documentId, 'v1');
 
+    // Link menu upload to document
+    try {
+      await db.update(menuSchema.menuUploads)
+        .set({ documentId: triage.documentId })
+        .where(eq(menuSchema.menuUploads.id, menuId));
+    } catch {}
+
     return c.json({
       success: true,
       menuId: menuResult[0].id,
@@ -1083,6 +1141,72 @@ api.get('/documents/:documentId/status', async (c) => {
     return c.json({ error: 'Failed to fetch status' }, 500);
   }
 });
+
+  // Protected alias for document status with ownership enforcement
+  api.get('/protected/documents/:documentId/status', authMiddleware, async (c) => {
+    try {
+      const db = await getDatabase();
+      const documentId = c.req.param('documentId');
+      const user = c.get('user');
+      const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
+      if (!doc || (doc as any).userId !== user.id) {
+        return c.json({ error: 'Not found' }, 404);
+      }
+      const latestParseRun = (await db.select().from(parseRuns)
+        .where(eq(parseRuns.documentId, documentId))
+        .orderBy(desc(parseRuns.startedAt))
+        .limit(1))[0] as any;
+      let latestAnalysisRun: any = undefined;
+      const allParseRuns = await db.select().from(parseRuns)
+        .where(eq(parseRuns.documentId, documentId))
+        .orderBy(desc(parseRuns.startedAt));
+      if (allParseRuns.length) {
+        const analyses: any[] = [];
+        for (const pr of allParseRuns as any[]) {
+          const ar = (await db.select().from(analysisRuns)
+            .where(eq(analysisRuns.parseRunId, pr.id))
+            .orderBy(desc(analysisRuns.startedAt))
+            .limit(1))[0] as any;
+          if (ar) analyses.push(ar);
+        }
+        analyses.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+        latestAnalysisRun = analyses[0];
+      }
+
+      const docResp = {
+        id: (doc as any).id,
+        status: (doc as any).status,
+        statusReason: (doc as any).statusReason,
+        documentType: (doc as any).documentType,
+        sourceType: (doc as any).sourceType,
+        createdAt: (doc as any).createdAt,
+        updatedAt: (doc as any).updatedAt,
+      };
+      const parseResp = latestParseRun ? {
+        id: latestParseRun.id,
+        status: latestParseRun.status,
+        parseMethod: latestParseRun.parseMethod,
+        confidence: latestParseRun.confidence,
+        errorMessage: latestParseRun.errorMessage,
+        startedAt: latestParseRun.startedAt,
+        completedAt: latestParseRun.completedAt,
+      } : null;
+      const analysisResp = latestAnalysisRun ? {
+        id: latestAnalysisRun.id,
+        status: latestAnalysisRun.status,
+        analysisVersion: latestAnalysisRun.analysisVersion,
+        metrics: latestAnalysisRun.metrics,
+        errorMessage: latestAnalysisRun.errorMessage,
+        startedAt: latestAnalysisRun.startedAt,
+        completedAt: latestAnalysisRun.completedAt,
+      } : null;
+
+      return c.json({ document: docResp, parseRun: parseResp, analysisRun: analysisResp });
+    } catch (error) {
+      console.error('Protected status endpoint error:', error);
+      return c.json({ error: 'Failed to fetch status' }, 500);
+    }
+  });
 
 // Mount the API router
 app.route('/api/v1', api);

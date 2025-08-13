@@ -4,13 +4,28 @@ This template provides a minimal setup to get React working in Vite with HMR and
 
 ## Firebase Authentication Setup
 
-This app uses Firebase for authentication. To set up Firebase:
+This app uses Firebase for authentication and calls the API using environment-configured URLs.
+
+## UI Environment Variables
+
+Create or update `ui/.env` (development) and set:
+
+```env
+VITE_API_URL=http://localhost:8787   # API base during local dev (see server logs)
+VITE_RECAPTCHA_SITE_KEY=your-site-key  # reCAPTCHA site key (Frontend-only public key)
+```
+
+For production (Cloudflare Pages), set the same variables in Pages project settings.
+
+## Firebase Authentication Setup
+
+To set up Firebase:
 
 1. Go to [Firebase Console](https://console.firebase.google.com/)
 2. Create a new project or select an existing one
 3. Add a web app to your project by clicking the web icon (</>)
 4. Register your app and copy the provided configuration
-5. Paste the configuration into `src/lib/firebase-config.json`:
+5. Paste the configuration into `src/lib/firebase-config.json` (you can copy from `firebase-config.template.json`):
 
 ```json
 {

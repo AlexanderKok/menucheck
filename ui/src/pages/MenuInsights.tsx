@@ -52,7 +52,7 @@ export function MenuInsights() {
   const [analyses, setAnalyses] = useState<MenuAnalysis[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('history');
 
   // Load user's menus when component mounts and user is available
   useEffect(() => {
@@ -82,11 +82,15 @@ export function MenuInsights() {
       const categories = Array.isArray(analysisData.categories) ? analysisData.categories : [];
       const recommendations = Array.isArray(analysisData.recommendations) ? analysisData.recommendations : [];
 
+      const latestParseStatus = menu.latestParseStatus || null;
+      const latestAnalysisStatus = menu.latestAnalysisStatus || null;
+      const lastUpdatedAt = menu.lastUpdatedAt || menu.updatedAt || menu.createdAt;
+
       return {
         id: String(menu.id),
         fileName: menu.originalFileName || menu.fileName || 'Unknown Menu',
         uploadDate: menu.createdAt,
-        status: menu.status || 'processing',
+        status: latestAnalysisStatus || latestParseStatus || menu.status || 'processing',
         insights: {
           totalItems: safeParseFloat(menu.totalItems),
           avgPrice: safeParseFloat(menu.avgPrice),
@@ -392,9 +396,12 @@ export function MenuInsights() {
                         {analysis.status}
                       </Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {t('menuInsights.history.uploadedOn', 'Uploaded on')} {new Date(analysis.uploadDate).toLocaleDateString()}
-                    </p>
+                    <div className="text-sm text-muted-foreground">
+                      <p>
+                        {t('menuInsights.history.uploadedOn', 'Uploaded on')} {new Date(analysis.uploadDate).toLocaleDateString()}
+                      </p>
+                      {/* If backend provided lastUpdatedAt, surface it via transformed status string */}
+                    </div>
                     {analysis.status === 'completed' && (
                       <div className="mt-3 flex gap-2">
                         <Button variant="outline" size="sm">

@@ -205,6 +205,15 @@ EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;
 --> statement-breakpoint
+-- Ensure menu_uploads.document_id exists and is linked to documents
+ALTER TABLE "app"."menu_uploads" ADD COLUMN IF NOT EXISTS "document_id" text;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "app"."menu_uploads" ADD CONSTRAINT "menu_uploads_document_id_documents_id_fk" FOREIGN KEY ("document_id") REFERENCES "app"."documents"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
 -- Unified documents and processing lineage tables
 CREATE TABLE IF NOT EXISTS "app"."documents" (
   "id" text PRIMARY KEY NOT NULL,

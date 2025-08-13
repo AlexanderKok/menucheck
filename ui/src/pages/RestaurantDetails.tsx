@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Header } from '@/components/Header';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle, AlertCircle, Loader2, ChefHat, MapPin, Phone, Mail } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, ChefHat, MapPin, Phone } from 'lucide-react';
 import { requestPublicReport } from '@/lib/serverComm';
 
 const restaurantTypes = [

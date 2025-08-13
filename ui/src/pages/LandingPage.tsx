@@ -1,4 +1,4 @@
-import { useState } from 'react';
+// no React import needed
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,10 +12,7 @@ import {
   Globe,
   Star,
   Play,
-  CheckCircle,
   Users,
-  DollarSign,
-  Award,
   Zap,
   Target,
   Eye,
@@ -30,7 +27,7 @@ interface LandingPageProps {
 
 export function LandingPage({ onGetStarted, onSignIn }: LandingPageProps) {
   const { t } = useTranslation();
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  // Placeholder for potential future demo modal
 
   const features = [
     {
@@ -181,7 +178,6 @@ export function LandingPage({ onGetStarted, onSignIn }: LandingPageProps) {
               <Button 
                 variant="outline" 
                 size="lg"
-                onClick={() => setIsVideoPlaying(true)}
                 className="text-lg px-8 py-6 h-auto border-2 hover:bg-primary/5 transition-all duration-300"
               >
                 <Play className="mr-2 h-5 w-5" />

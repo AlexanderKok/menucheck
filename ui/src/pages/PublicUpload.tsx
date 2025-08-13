@@ -11,7 +11,8 @@ import { useAuth } from '@/lib/auth-context';
 import { useTranslation } from 'react-i18next';
 import { Upload, Link, CheckCircle, AlertCircle, ChefHat, Zap, Shield } from 'lucide-react';
 import ReCAPTCHA from 'react-google-recaptcha';
-import { uploadPublicMenu, parsePublicUrl } from '@/lib/serverComm';
+import { api, uploadPublicMenu, parsePublicUrl } from '@/lib/serverComm';
+import { useDocumentStatusPoll } from '@/hooks/useDocumentStatusPoll';
 
 export function PublicUpload() {
   const { t } = useTranslation();
@@ -26,6 +27,8 @@ export function PublicUpload() {
     success: boolean;
     message: string;
   } | null>(null);
+  const [lastDocumentId, setLastDocumentId] = useState<string | null>(null);
+  const { status, isPolling, start: startPolling } = useDocumentStatusPoll(lastDocumentId);
 
   const handleRecaptchaChange = (token: string | null) => {
     setRecaptchaVerified(!!token);
@@ -37,6 +40,15 @@ export function PublicUpload() {
     }
 
     const file = files[0];
+    // Client-side file size validation (10MB)
+    const maxSizeBytes = 10 * 1024 * 1024;
+    if (typeof file.size === 'number' && file.size > maxSizeBytes) {
+      setUploadResult({
+        success: false,
+        message: t('publicUpload.fileTooLarge', 'Maximum upload size is 10 MB')
+      });
+      return;
+    }
     
     // Skip reCAPTCHA in development mode or if no site key is configured
     const isDev = import.meta.env.DEV || !import.meta.env.VITE_RECAPTCHA_SITE_KEY;
@@ -53,12 +65,25 @@ export function PublicUpload() {
     setUploadResult(null);
 
     try {
-      let response;
+      let response: any;
       
       if (user) {
-        // For authenticated users, use the existing authenticated upload
-        // TODO: Implement authenticated file upload
-        throw new Error('Authenticated upload not implemented yet');
+        // Authenticated upload path
+        const fileContent = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64Content = result.split(',')[1];
+            resolve(base64Content);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        response = await api.uploadMenu({ file: { name: file.name, size: file.size, type: file.type, content: fileContent } });
+        if (response?.documentId) {
+          setLastDocumentId(response.documentId);
+          startPolling();
+        }
       } else {
         // For public uploads, use the public API
         const recaptchaToken = recaptchaRef.current?.getValue() || 'dev-token';
@@ -71,6 +96,8 @@ export function PublicUpload() {
             success: true,
             message: t('publicUpload.uploadSuccess', 'Upload successful! Check your dashboard for analysis results.')
           });
+          // Optionally start polling document status for feedback
+          // We keep UX simple: redirect CTA shown below
         } else {
           // Redirect to restaurant details page for public uploads
           navigate(`/restaurant-details/${response.uploadId}`);
@@ -92,6 +119,8 @@ export function PublicUpload() {
       
       if (error.status === 429) {
         errorMessage = t('publicUpload.rateLimitError', 'Too many uploads. Please wait before trying again.');
+      } else if (error.status === 413) {
+        errorMessage = t('publicUpload.fileTooLarge', 'Maximum upload size is 10 MB');
       } else if (error.message?.includes('reCAPTCHA')) {
         errorMessage = t('publicUpload.recaptchaError', 'reCAPTCHA verification failed. Please try again.');
       }
@@ -121,12 +150,15 @@ export function PublicUpload() {
     setUploadResult(null);
 
     try {
-      let response;
+      let response: any;
       
       if (user) {
-        // For authenticated users, use the existing authenticated URL parsing
-        // TODO: Implement authenticated URL upload with restaurant data
-        throw new Error('Authenticated URL upload not implemented yet');
+        // Authenticated URL parse path
+        response = await api.uploadMenuUrl({ url: urlData.url, restaurant: { name: '' } });
+        if (response?.documentId) {
+          setLastDocumentId(response.documentId);
+          startPolling();
+        }
       } else {
         // For public uploads, use the public API
         const recaptchaToken = recaptchaRef.current?.getValue() || 'dev-token';
@@ -312,6 +344,16 @@ export function PublicUpload() {
                   </Alert>
                 )}
 
+                {user && lastDocumentId && (
+                  <div className="mt-4 text-center text-sm text-muted-foreground">
+                    {isPolling ? (
+                      <span>Processing in progress...</span>
+                    ) : status ? (
+                      <span>Processing {status.document.status}</span>
+                    ) : null}
+                  </div>
+                )}
+
                 {/* Call to Action for Public Users */}
                 {!user && (
                   <div className="text-center mt-8 pt-6 border-t">
@@ -320,6 +362,14 @@ export function PublicUpload() {
                     </p>
                     <Button onClick={() => navigate('/login')} size="lg">
                       {t('publicUpload.cta.button', 'Create Free Account')}
+                    </Button>
+                  </div>
+                )}
+
+                {user && uploadResult?.success && (
+                  <div className="text-center mt-8 pt-6 border-t">
+                    <Button onClick={() => navigate('/dashboard/menu-insights')} size="lg">
+                      {t('publicUpload.goToMenus', 'Go to My Menus')}
                     </Button>
                   </div>
                 )}

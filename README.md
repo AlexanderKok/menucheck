@@ -193,11 +193,13 @@ Your API will be available at: `https://your-worker-name.your-subdomain.workers.
 Set these in Cloudflare dashboards:
 
 **Worker Environment Variables:**
-- `DATABASE_URL` - Your database connection string
+- `DATABASE_URL` - Your database connection string (from Neon/Supabase or custom Postgres)
 - `FIREBASE_PROJECT_ID` - Firebase project ID
+- `RECAPTCHA_SECRET_KEY` - Google reCAPTCHA secret for public endpoints
 
-**Pages Environment Variables (if needed):**
-- `VITE_API_URL` - Your deployed worker URL (optional, defaults work)
+**Pages Environment Variables (UI):**
+- `VITE_API_URL` - Your deployed worker URL (e.g., `https://<worker>.<subdomain>.workers.dev` or your custom domain)
+- `VITE_RECAPTCHA_SITE_KEY` - Public site key for reCAPTCHA, used by the UI
 
 ### Post-Deployment Setup
 
@@ -328,3 +330,20 @@ pnpm install
 **Happy coding!** 🚀
 
 Need help? Check the detailed documentation in each workspace (`server/README.md`, `ui/README.md`) or visit the [community discussions](https://github.com/VoloBuilds/create-volo-app/discussions). 
+
+## Parsing prerequisites (OCR/PDF utilities)
+
+Some parsing and triage paths rely on external tools (only needed for OCR/triage, not for purely digital PDFs):
+
+- poppler-utils: `pdftoppm`, `pdfinfo`
+- tesseract OCR: `tesseract`
+
+Install:
+
+- macOS: `brew install poppler tesseract`
+- Ubuntu/Debian: `apt-get update && apt-get install -y poppler-utils tesseract-ocr`
+
+Environment reminders:
+
+- Server: `RECAPTCHA_SECRET_KEY`, `DATABASE_URL`, optional `RUNTIME`
+- UI: `VITE_API_URL`, `VITE_RECAPTCHA_SITE_KEY`
